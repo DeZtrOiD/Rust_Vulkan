@@ -7,10 +7,10 @@
 // 2. glfw.vulkan_supported();
 // #=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#
 
-use glfw::{Context, Glfw, GlfwReceiver, PWindow, WindowEvent, WindowMode, Key,
-    Action, WindowHint, ffi};
-use ash::vk::{self, Handle};
-use ash::{Instance};
+use glfw::{ Glfw, GlfwReceiver, PWindow, WindowEvent, WindowMode, Key,
+    Action, WindowHint, ffi };
+use ash::vk::{ self, Handle };
+use ash::{ Instance };
 
 pub type MWResult<T> = Result<T, &'static str>;
 pub struct Window {

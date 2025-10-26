@@ -1,20 +1,25 @@
 // #=#=#=#=#=#=#=#=#-DeZtrOidDeV-#=#=#=#=#=#=#=#=#
 // Author: DeZtrOid
 // Date: 2025
-// Desc: 
+// Desc: пробовать новый язык нужно с нового движка
 // #=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#
 
 mod window;
 mod vulkan_wr;
 
-use vulkan_wr::instance::VulkanInstance;
+use vulkan_wr::core::VulkanCore;
 // use vulkan_wr::device::VulkanDevice;
 
 fn main() {
+    let app_name = "RUST_POBEDA";
+    let height = 720;
+    let width = 1280;
 
-    let mut window_ = window::Window::try_new(512, 512, "RUST_POBEDA", glfw::WindowMode::Windowed)
+    let mut window_ = window::Window::try_new(width, height, app_name, glfw::WindowMode::Windowed)
         .unwrap();
-    let aa = VulkanInstance::try_new(&window_).unwrap();
+    let aa = VulkanCore::try_new(&window_, app_name).unwrap();
+    // надо в нее как то по нормальному размеры передавать
+    let ss = vulkan_wr::swapchain::VulkanSwapchain::try_new(&aa, width, height).unwrap();
 
     // Loop until the user closes the window
     while !window_.should_close() {
