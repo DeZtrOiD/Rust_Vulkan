@@ -12,7 +12,8 @@ use ash::ext::debug_utils;
 use crate::window::Window;
 use std::ffi::CString;
 
-pub struct VulkanCore {
+// так много super
+pub(super) struct VulkanCore {
     pub(super) _entry: Entry,
     pub(super) _instance: Instance,
     pub(super) _surface: vk::SurfaceKHR,
@@ -246,14 +247,15 @@ impl VulkanCore {
         println!("[{:?} {:?}] {}", severity, types, msg);
         vk::FALSE
     }
-}
 
-impl Drop for VulkanCore {
-    fn drop(&mut self) {
+    pub(super) fn destroy(&self) {
         unsafe {
+            if self._logical_device.device_wait_idle().is_err() {
+                println!("Something went wrong with the logical device wait");
+            }
+            self._logical_device.destroy_device(None);
             let surface_loader = khr::surface::Instance::new(&self._entry, &self._instance);
             surface_loader.destroy_surface(self._surface, None);
-            self._logical_device.destroy_device(None);
 
             #[cfg(debug_assertions)]
             {
@@ -264,3 +266,23 @@ impl Drop for VulkanCore {
         }
     }
 }
+
+// impl Drop for VulkanCore {
+//     fn drop(&mut self) {
+//         unsafe {
+//             if self._logical_device.device_wait_idle().is_err() {
+//                 println!("Something went wrong with the logical device wait");
+//             }
+//             self._logical_device.destroy_device(None);
+//             let surface_loader = khr::surface::Instance::new(&self._entry, &self._instance);
+//             surface_loader.destroy_surface(self._surface, None);
+
+//             #[cfg(debug_assertions)]
+//             {
+//                 let utils = debug_utils::Instance::new(&self._entry, &self._instance);
+//                 utils.destroy_debug_utils_messenger(self._debug_messenger, None);
+//             }
+//             self._instance.destroy_instance(None);
+//         }
+//     }
+// }

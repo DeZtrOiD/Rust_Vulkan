@@ -8,3 +8,4 @@ authors = ["DeZtrOiD"]
 ash = {version = "0.38.0"}
 glfw = { version = "0.60.0", features = ["vulkan"] }
 imgui = "0.12.0"
+imgui-rs-vulkan-renderer = "1.16.0"
