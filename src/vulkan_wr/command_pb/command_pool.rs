@@ -1,7 +1,7 @@
 // #=#=#=#=#=#=#=#=#-DeZtrOidDeV-#=#=#=#=#=#=#=#=#
 // Author: DeZtrOid
 // Date: 2025
-// Desc:
+// Desc: command pool wrapper
 // #=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#
 
 
@@ -17,11 +17,18 @@ pub struct VulkanCommandPool {
 type CResult<T> = Result<T, &'static str>;
 
 impl VulkanCommandPool {
-    pub fn try_new(log_device: &Device, queue_index: u32) -> CResult<Self> {
+    /// # Args
+    /// * queue_index - индекс семейства очередей с которым будет связан пул,
+    /// он сможет создавать буферы лишь для него
+    /// * flags - Bitmask specifying usage behavior for a command pool
+    /// * * TRANSIENT_BIT - буферы живут мало
+    /// * * RESET_COMMAND_BUFFER_BIT - позволяет reset buffer
+    /// * * CREATE_PROTECTED_BIT - Creates "protected" command buffers which are stored in "protected" memory where Vulkan prevents unauthorized operations from accessing the memory
+    pub fn try_new(log_device: &Device, queue_index: u32, flags: vk::CommandPoolCreateFlags) -> CResult<Self> {
 
         let create_info = vk::CommandPoolCreateInfo{
             queue_family_index: queue_index,
-            flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+            flags: flags ,
             ..Default::default()
         };
 
@@ -34,6 +41,11 @@ impl VulkanCommandPool {
         })
     }
 
+    /// # Args
+    /// * count - очевидно количество буферов
+    /// * level -
+    /// * * PRIMARY - command buffers, which can execute secondary command buffers, and which are submitted to queues 
+    /// * * SECONDARY - secondary command buffers, which can be executed by primary command buffers, and which are not directly submitted to queues
     pub fn allocate_command_buffers(&self, count: u32, level: vk::CommandBufferLevel) -> CResult<Vec<VulkanCommandBuffer>> {
         let allocate_info = vk::CommandBufferAllocateInfo {
             command_pool: self._pool,
@@ -62,14 +74,17 @@ impl VulkanCommandPool {
         }
     }
 
-    pub(super) fn destroy(&self) {
-        unsafe { self._log_device.destroy_command_pool(self._pool, None) };
+    pub fn reset(&self) -> CResult<()> {
+        let flags = vk::CommandPoolResetFlags::RELEASE_RESOURCES;
+        unsafe {
+            self._log_device.reset_command_pool(self._pool, flags)
+                .map_err(|_| "Err reset_command_pool")
+        }
     }
 }
 
-// bool сюда что ли заснуть, чтобы 2 раза не вызвать destroy
-// impl Drop for VulkanCommandPool {
-//     fn drop(&mut self) {
-//         unsafe { self._log_device.destroy_command_pool(self._pool, None) };
-//     }
-// }
+impl Drop for VulkanCommandPool {
+    fn drop(&mut self) {
+        unsafe { self._log_device.destroy_command_pool(self._pool, None) };
+    }
+}

@@ -1,7 +1,7 @@
 // #=#=#=#=#=#=#=#=#-DeZtrOidDeV-#=#=#=#=#=#=#=#=#
 // Author: DeZtrOid
 // Date: 2025
-// Desc:
+// Desc: Shader wrapper
 // #=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#
 
 
@@ -28,6 +28,7 @@ impl VulkanShader {
             dwords.push(u32::from_le_bytes([ chunk[0], chunk[1], chunk[2], chunk[3] ]));
         }
 
+        // флаг тут зарезервирован до лучших времен
         let shader_info = vk::ShaderModuleCreateInfo {
             code_size: file_size,
             p_code: dwords.as_ptr(),
@@ -45,5 +46,10 @@ impl VulkanShader {
     pub fn destroy(&self) {
         unsafe { self._device.destroy_shader_module(self._shader, None) };
     }
+}
 
+impl Drop for VulkanShader {
+    fn drop(&mut self) {
+        unsafe { self._device.destroy_shader_module(self._shader, None) };
+    }
 }

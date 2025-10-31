@@ -1,0 +1,231 @@
+// #=#=#=#=#=#=#=#=#-DeZtrOidDeV-#=#=#=#=#=#=#=#=#
+// Author: DeZtrOid
+// Date: 2025
+// Desc: Pipeline wrapper with builder
+// #=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#
+
+
+use ash::{vk, Device};
+
+
+
+// =====================================================================
+// VulkanPipeline — RAII обёртка над vk::Pipeline
+// =====================================================================
+pub struct VulkanPipeline {
+    pub pipeline: vk::Pipeline,
+    device: Device,
+}
+
+impl Drop for VulkanPipeline {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.destroy_pipeline(self.pipeline, None);
+        }
+    }
+}
+
+
+
+// =====================================================================
+// VulkanPipelineBuilder — построитель графического пайплайна
+// Не поддерживает наследуемые пайплайны (base pipeline)
+// =====================================================================
+pub struct VulkanPipelineBuilder<'a> {
+    /// Vulkan устройство, через которое будет создан пайплайн
+    device: &'a Device,
+    /// Список шейдерных стадий (vertex, fragment, geometry и т.д.)
+    shader_stages: Vec<vk::PipelineShaderStageCreateInfo<'a>>,
+    /// Structure specifying parameters of a newly created pipeline vertex input state (формат, layout, атрибуты)
+    vertex_input: vk::PipelineVertexInputStateCreateInfo<'a>,
+    /// Описивыет сборку примитивов (Point, Line Triangle_List/Strip/Fan etc)
+    input_assembly: vk::PipelineInputAssemblyStateCreateInfo<'a>,
+    /// Конфигурация вьюпорта и scissor-прямоугольника
+    viewport_state: vk::PipelineViewportStateCreateInfo<'a>,
+    /// Настройки растеризатора (режим полигона, отбрасывание граней, направление фронт-фейса)
+    rasterizer: vk::PipelineRasterizationStateCreateInfo<'a>,
+    /// Настройки мультисэмплинга (MSAA)
+    multisampling: vk::PipelineMultisampleStateCreateInfo<'a>,
+    /// Параметры теста глубины и трафарета
+    depth_stencil: vk::PipelineDepthStencilStateCreateInfo<'a>,
+    /// Настройки смешивания для одного цветового attachment
+    color_blend_attachment: vk::PipelineColorBlendAttachmentState,
+    /// Общие параметры смешивания для пайплайна
+    color_blend: vk::PipelineColorBlendStateCreateInfo<'a>,
+    /// Настройки тесселяции
+    tessellation: vk::PipelineTessellationStateCreateInfo<'a>,
+    /// Bitmask controlling how a pipeline is created
+    flags: vk::PipelineCreateFlags,
+
+    /// Целевой рендер-пасс, с которым ассоциируется пайплайн
+    render_pass: vk::RenderPass,
+    /// Номер субпасса в render_pass, в котором используется пайплайн
+    subpass: u32,
+    /// Layout пайплайна (описывает дескрипторы и push-константы)
+    pipeline_layout: vk::PipelineLayout,
+}
+
+impl<'a> VulkanPipelineBuilder<'a> {
+    pub fn new(device: &'a Device, render_pass: vk::RenderPass, layout: vk::PipelineLayout) -> Self {
+        let vertex_input = vk::PipelineVertexInputStateCreateInfo::default();
+
+        let input_assembly = vk::PipelineInputAssemblyStateCreateInfo {
+            topology: vk::PrimitiveTopology::TRIANGLE_LIST,
+            primitive_restart_enable: vk::FALSE, // используется для вывода множества элементов VBO по одному EBO
+            ..Default::default()
+        };
+
+        let viewport_state = vk::PipelineViewportStateCreateInfo {
+            viewport_count: 1,  // NDC -> координты экрана - после вертексного шейдера
+            scissor_count: 1,  // Ограничивает область рендеринга пикселей - при растеризации
+            ..Default::default()
+        };
+
+        let rasterizer = vk::PipelineRasterizationStateCreateInfo {
+            depth_clamp_enable: vk::FALSE,  // вместо отсечения фрагменты прижимаются к границам
+            rasterizer_discard_enable: vk::FALSE,  // TRUE отключает растеризацию и все что после. Нужно для каких-то особых вычислений 
+            polygon_mode: vk::PolygonMode::FILL,
+            line_width: 1.0,
+            cull_mode: vk::CullModeFlags::BACK,
+            front_face: vk::FrontFace::COUNTER_CLOCKWISE,
+            depth_bias_enable: vk::FALSE,  // для борьбы с z-fighting
+            ..Default::default()
+        };
+
+        let multisampling = vk::PipelineMultisampleStateCreateInfo {
+            rasterization_samples: vk::SampleCountFlags::TYPE_1,  // specifying sample counts
+            sample_shading_enable: vk::FALSE,  // лучше MSAA, но вычисляет фрагментный шейер на каждом семпле?
+            ..Default::default()
+        };
+
+        let depth_stencil = vk::PipelineDepthStencilStateCreateInfo {
+            depth_test_enable: vk::TRUE,
+            depth_write_enable: vk::TRUE,  // записывает глубину, что не нужно для прозрачных объектов, чтобы они не скрывали те что сзади
+            depth_compare_op: vk::CompareOp::LESS,
+            depth_bounds_test_enable: vk::FALSE,  // тест глубины по диапазону
+            stencil_test_enable: vk::FALSE,  // stencil test
+            ..Default::default()
+        };
+
+        let color_blend_attachment = vk::PipelineColorBlendAttachmentState {
+            color_write_mask: vk::ColorComponentFlags::RGBA,
+            blend_enable: vk::FALSE,
+            ..Default::default()
+        };
+
+        let color_blend = vk::PipelineColorBlendStateCreateInfo {
+            logic_op_enable: vk::FALSE,
+            attachment_count: 1,
+            p_attachments: &color_blend_attachment,
+            ..Default::default()
+        };
+
+        let tessellation = vk::PipelineTessellationStateCreateInfo {
+            ..Default::default()
+        };
+
+        Self {
+            device: device,
+            shader_stages: Vec::new(),
+            vertex_input: vertex_input,
+            input_assembly: input_assembly,
+            viewport_state: viewport_state,
+            rasterizer: rasterizer,
+            multisampling: multisampling,
+            depth_stencil: depth_stencil,
+            color_blend_attachment: color_blend_attachment,
+            color_blend: color_blend,
+            flags: vk::PipelineCreateFlags::default(),
+
+            render_pass: render_pass,
+            subpass: 0,
+            pipeline_layout: layout,
+            tessellation: tessellation,
+        }
+    }
+
+    pub fn with_shader_stages(mut self, stages: Vec<vk::PipelineShaderStageCreateInfo<'a>>) -> Self {
+        self.shader_stages = stages;
+        self
+    }
+
+    pub fn with_vertex_input(mut self, state: vk::PipelineVertexInputStateCreateInfo<'a>) -> Self {
+        self.vertex_input = state;
+        self
+    }
+
+    pub fn with_input_assembly(mut self, state: vk::PipelineInputAssemblyStateCreateInfo<'a>) -> Self {
+        self.input_assembly = state;
+        self
+    }
+
+    pub fn with_rasterizer(mut self, state: vk::PipelineRasterizationStateCreateInfo<'a>) -> Self {
+        self.rasterizer = state;
+        self
+    }
+
+    pub fn with_multisampling(mut self, state: vk::PipelineMultisampleStateCreateInfo<'a>) -> Self {
+        self.multisampling = state;
+        self
+    }
+
+    pub fn with_depth_stencil(mut self, state: vk::PipelineDepthStencilStateCreateInfo<'a>) -> Self {
+        self.depth_stencil = state;
+        self
+    }
+
+    pub fn with_color_blend(mut self, state: vk::PipelineColorBlendStateCreateInfo<'a>) -> Self {
+        self.color_blend = state;
+        self
+    }
+
+    pub fn with_subpass(mut self, subpass: u32) -> Self {
+        self.subpass = subpass;
+        self
+    }
+
+    pub fn change_tessellation(mut self, tessellation: vk::PipelineTessellationStateCreateInfo<'a>) -> Self {
+        self.tessellation = tessellation;
+        self
+    }
+
+    pub fn change_flags(mut self, flags: vk::PipelineCreateFlags) -> Self {
+        self.flags = flags;
+        self
+    }
+
+    pub fn build(self) -> Result<VulkanPipeline, &'static str> {
+
+        let create_info = vk::GraphicsPipelineCreateInfo {
+            stage_count: self.shader_stages.len() as u32,
+            p_stages: self.shader_stages.as_ptr(),
+            p_vertex_input_state: &self.vertex_input,
+            p_input_assembly_state: &self.input_assembly,
+            p_viewport_state: &self.viewport_state,
+            p_rasterization_state: &self.rasterizer,
+            p_multisample_state: &self.multisampling,
+            p_depth_stencil_state: &self.depth_stencil,
+            p_color_blend_state: &self.color_blend,
+            p_tessellation_state: &self.tessellation,
+            flags: self.flags,
+
+            layout: self.pipeline_layout,
+            render_pass: self.render_pass,
+            subpass: self.subpass,
+            ..Default::default()
+        };
+
+        let pipelines = unsafe {
+            self.device
+                .create_graphics_pipelines(vk::PipelineCache::null(), &[create_info], None)
+                .map_err(|_| "Failed to create graphics pipeline")?
+        };
+
+        Ok(
+            VulkanPipeline{
+                pipeline: pipelines[0],
+                device: self.device.clone() 
+            }
+        )
+    }
+}
