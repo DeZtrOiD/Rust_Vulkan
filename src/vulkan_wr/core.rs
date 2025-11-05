@@ -71,6 +71,12 @@ impl VulkanCore {
         unsafe { self._logical_device.free_memory(memory.clone(), None) };
     }
 
+    pub fn queue_submit(&self, submits: &[vk::SubmitInfo<'_>], fence: vk::Fence) -> CoreVkResult<()> {
+        unsafe {
+            self._logical_device.queue_submit(self._graphics_queue, submits, fence).map_err(|_| "queue_submit failed")
+        }
+    }
+
 }
 
 impl Drop for VulkanCore {

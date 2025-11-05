@@ -11,4 +11,5 @@ pub mod image;
 pub mod buffer;
 pub mod framebuffer;
 pub mod semaphore;
-
+pub mod fence;
+pub mod render_func;

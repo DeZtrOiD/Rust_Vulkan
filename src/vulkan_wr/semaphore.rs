@@ -8,7 +8,7 @@
 use ash::{vk, Device};
 
 pub struct VulkanSemaphore{
-    pub _semaphore: vk::Semaphore,
+    pub semaphore: vk::Semaphore,
     _device: Device,
 }
 
@@ -21,7 +21,7 @@ impl VulkanSemaphore {
         };
         
         Ok(Self {
-            _semaphore: sem,
+            semaphore: sem,
             _device: device.clone()
         })
     }
@@ -30,7 +30,7 @@ impl VulkanSemaphore {
 impl Drop for VulkanSemaphore {
     fn drop(&mut self) {
         unsafe {
-            self._device.destroy_semaphore(self._semaphore, None)
+            self._device.destroy_semaphore(self.semaphore, None)
         };
     }
 }

@@ -20,6 +20,25 @@ pub struct VulkanSwapchain {
     _device: Device,
 }
 
+impl VulkanSwapchain {
+    pub fn acquire_next_image(&self, sem: Option<vk::Semaphore>, fence: Option<vk::Fence>) -> Result<(u32, bool), &'static str> {
+        unsafe {
+            self.ext_device.acquire_next_image(
+                self.swapchain,
+                u64::MAX,
+                sem.unwrap_or(vk::Semaphore::null()),
+                fence.unwrap_or(vk::Fence::null())
+            ).map_err(|_| "Err acquire_next_image")
+        }
+    }
+
+    pub fn queue_present(&self, queue: vk::Queue, present_info: &vk::PresentInfoKHR) -> Result<bool, &'static str> {
+        unsafe {
+            self.ext_device.queue_present(queue, present_info).map_err(|_| "Err queue_present")
+        }
+    }
+}
+
 impl Drop for VulkanSwapchain {
     fn drop(&mut self) {
         unsafe {
@@ -197,13 +216,13 @@ impl<'a> VulkanSwapchainBuilder<'a> {
         };
 
         Ok(VulkanSwapchain {
-            swapchain,
+            swapchain: swapchain,
             ext_device: swapchain_device,
-            images,
-            color_format,
-            color_space,
-            depth_format,
-            extent,
+            images: images,
+            color_format: color_format,
+            color_space: color_space,
+            depth_format: depth_format,
+            extent: extent,
             _device: device.clone(),
         })
     }

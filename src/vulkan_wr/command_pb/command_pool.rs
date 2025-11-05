@@ -21,7 +21,7 @@ impl VulkanCommandPool {
     /// * queue_index - индекс семейства очередей с которым будет связан пул,
     /// он сможет создавать буферы лишь для него
     /// * flags - Bitmask specifying usage behavior for a command pool
-    /// * * TRANSIENT_BIT - буферы живут мало
+    /// * * TRANSIENT_BIT - буферы живут недолго но весело
     /// * * RESET_COMMAND_BUFFER_BIT - позволяет reset buffer
     /// * * CREATE_PROTECTED_BIT - Creates "protected" command buffers which are stored in "protected" memory where Vulkan prevents unauthorized operations from accessing the memory
     pub fn try_new(log_device: &Device, queue_index: u32, flags: vk::CommandPoolCreateFlags) -> CResult<Self> {
