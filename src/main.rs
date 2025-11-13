@@ -6,10 +6,17 @@
 
 mod window;
 mod vulkan_wr;
+mod scenes;
 
 use vulkan_wr::app::{VulkanApp};
-use vulkan_wr::render_func::{init_app, update_app, shutdown_app, render_frame_app};
-use ash::{vk};
+// use vulkan_wr::render_func::{init_app, update_app, shutdown_app, render_frame_app};
+use scenes::sphere::{
+    frame_resources::get_frame_resources,
+    init::init_app,
+    update::update_app,
+    render_frame::render_frame_app,
+    shutdown::shutdown_app,
+};
 
 
 fn main() {
@@ -26,7 +33,8 @@ fn main() {
         image_count,
         0,
         image_count * 2, // 2 семафора на изображение
-        image_count
+        image_count,
+        get_frame_resources
     ).unwrap();
 
     app.init(init_app, &mut frame_res).unwrap();

@@ -8,7 +8,7 @@
 use ash::{vk, Device};
 use std::io::Read;
 
-pub(super) struct VulkanShader {
+pub struct VulkanShader {
     pub _shader: vk::ShaderModule,
     _device:Device,
 }
@@ -17,7 +17,7 @@ pub type SResult<T> = Result<T, &'static str>;
 
 
 impl VulkanShader {
-    pub(super) fn try_new(device: &Device, path: &str) -> SResult<Self> {
+    pub fn try_new(device: &Device, path: &str) -> SResult<Self> {
         let mut file = std::fs::File::open(path).map_err(|_| "Unable to load shader!")?;
         let mut raw = vec![];
         let file_size = file.read_to_end(&mut raw).map_err(|_| "")?;

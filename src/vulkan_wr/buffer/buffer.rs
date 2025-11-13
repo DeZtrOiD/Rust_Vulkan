@@ -37,7 +37,7 @@ impl VulkanBuffer {
     /// * flags: Option<vk::BufferCreateFlags>,  - какие-то флаги для тонкой настройки расположения в памяти буффера <br>
     /// * p_qf_indices:  Option<*const u32>   указывает какие семейства очередей могут использовать буффер <br>
     /// * sharing_mode: Option<vk::SharingMode>, - могут ли несколько семей его разделять
-    pub(in crate::vulkan_wr) fn try_new(
+    pub fn try_new(
             core: &VulkanCore,
             size: vk::DeviceSize,
             usage: vk::BufferUsageFlags,

@@ -13,15 +13,15 @@ use ash::ext::debug_utils;
 use crate::window::Window;
 use std::ffi::CString;
 
-// так много super
-pub(super) struct VulkanCore {
-    pub(super) _entry: Entry,
-    pub(super) _instance: Instance,
-    pub(super) _surface: vk::SurfaceKHR,
-    pub(super) _physical_device: vk::PhysicalDevice,
-    pub(super) _logical_device: Device,
-    pub(super) _graphics_queue: vk::Queue,
-    pub(super) _graphics_queue_index: u32,
+// так много super, уже нет
+pub struct VulkanCore {
+    pub _entry: Entry,
+    pub _instance: Instance,
+    pub _surface: vk::SurfaceKHR,
+    pub _physical_device: vk::PhysicalDevice,
+    pub _logical_device: Device,
+    pub _graphics_queue: vk::Queue,
+    pub _graphics_queue_index: u32,
 
     #[cfg(debug_assertions)]
     _debug_messenger: vk::DebugUtilsMessengerEXT,

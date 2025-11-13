@@ -1,7 +1,7 @@
 // #=#=#=#=#=#=#=#=#-DeZtrOidDeV-#=#=#=#=#=#=#=#=#
 // Author: DeZtrOid
 // Date: 2025
-// Desc: Swapcahin wrapper + swapchain builder
+// Desc: обертка для одной вершины
 // #=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#
 
 

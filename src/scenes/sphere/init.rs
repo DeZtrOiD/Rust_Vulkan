@@ -1,28 +1,20 @@
-// #=#=#=#=#=#=#=#=#-DeZtrOidDeV-#=#=#=#=#=#=#=#=#
-// Author: DeZtrOid
-// Date: 2025
-// Desc: 
-// #=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#
 
-use super::app::{VulkanApp, FrameResources};
-use ash::vk;
-use super::render_pass::{subpass::SubpassConfigBuilder, pass::VulkanRenderPass};
-use super::descriptor::{descriptor_set_layout::VulkanDescriptorSetLayout, descriptor_set::VulkanDescriptorSet};
-use super::pipeline::{pipeline_layout::VulkanPipelineLayout, pipeline::VulkanPipelineBuilder};
-use super::shader::VulkanShader;
-use super::buffer::buffer::VulkanBuffer;
-use super::framebuffer::{VulkanFramebuffer};
-use super::image::{image_view::{VulkanImageViewBuilder, VulkanImageView}, image::{VulkanImage, VulkanImageBuilder}};
-use super::vertex::{Vertex};
+use super::{
+    frame_resources::FrameResources,
+    uniform::Uniforms
+};
+use super::super::super::vulkan_wr::{
+    app::VulkanApp,
+    render_pass::{subpass::SubpassConfigBuilder, pass::VulkanRenderPass},
+    descriptor::descriptor_set_layout::VulkanDescriptorSetLayout,
+    pipeline::{pipeline_layout::VulkanPipelineLayout, pipeline::VulkanPipelineBuilder},
+    shader::VulkanShader,
+    buffer::buffer::VulkanBuffer,
+    framebuffer::VulkanFramebuffer,
+    image::{image_view::VulkanImageViewBuilder, image::VulkanImageBuilder},
+    types::vertex::Vertex
+};
 
-
-#[repr(C)] // без компилятор может поменять порядок
-#[derive(Clone, Copy, Debug)]
-pub struct Uniforms {
-    pub mvp: [[f32;4];4], // локальное в NDC 
-    pub time: f32,
-    _pad: [f32;3], // выравнивание до 16 байт v4 float
-}
 
 pub fn init_app(app: &mut VulkanApp, resources: &mut FrameResources) -> Result<(), &'static str> {
 
@@ -440,97 +432,4 @@ pub fn init_app(app: &mut VulkanApp, resources: &mut FrameResources) -> Result<(
 
     Ok(())
 
-}
-
-
-pub fn update_app(app: &mut VulkanApp, resources: &mut FrameResources) -> Result<(), &'static str> {
-    let time = (std::time::Instant::now() - resources.start_time).as_secs_f32();
-
-    /// выдели отдельно класс матриц
-    fn mat4_identity() -> [[f32;4];4] {
-        [
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [0.0, 0.0, 0.0, 1.0],
-        ]
-    }
-    fn rotate_y(angle: f32) -> [[f32;4];4] {
-        let c = angle.cos();
-        let s = angle.sin();
-        [
-            [ c, 0.0, s, 0.0],
-            [0.0, 1.0,0.0, 0.0],
-            [-s,0.0, c, 0.0],
-            [0.0,0.0,0.0, 1.0],
-        ]
-    }
-    let speed = 0.6;  // 0.6 rad/s 
-    let model = rotate_y(time * speed); // вращение со временем
-
-    let mvp_cpu = model ;//transpose(&mvp);
-
-    let u = Uniforms { mvp: mvp_cpu, time: time, _pad: [0.0,0.0,0.0] };
-
-    for ub in &resources.uniform_buffers {
-        unsafe {
-            ub.mem_copy(&[u], None, None, None)?;
-        }
-    }
-    Ok(())
-}
-
-pub fn render_frame_app(app: & mut VulkanApp, resources: &mut FrameResources) -> Result<(), &'static str> {
-    // fecne связывает CPU GPU, индексируется фреймом, image_available принадлежит также фрейму.
-    // Тк когда queue_submit закончит работу, этот фрейм снова освободится через fence
-    // cmd buf и render_finished индексируются картинкой, тк тесно с ней связаны.
-    let current_frame = app.frame_index;
-    
-    let frame_sync = resources.vec_fence[current_frame].fence;
-    unsafe {
-        app.core._logical_device.wait_for_fences(&[frame_sync], true, u64::MAX).unwrap();
-        app.core._logical_device.reset_fences(&[frame_sync]).unwrap();
-    }
-    
-    let sem_offset = (current_frame * 2) as usize;
-    let image_available = &resources.vec_sem[sem_offset];
-    
-    let (image_index, _) = app.swapchain.acquire_next_image(Some(image_available.semaphore), None)?;
-    let cmd_buffer = &resources.vec_cmd[image_index as usize];
-    let render_finished = &resources.vec_sem[(image_index * 2 + 1) as usize];
-
-    // Submit
-    let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-
-    let submit_info = vk::SubmitInfo {
-        wait_semaphore_count: 1,
-        p_wait_semaphores: &image_available.semaphore,
-        p_wait_dst_stage_mask: wait_stages.as_ptr(),
-        command_buffer_count: 1,
-        p_command_buffers: &cmd_buffer._buffer,
-        signal_semaphore_count: 1,
-        p_signal_semaphores: &render_finished.semaphore,
-        ..Default::default()
-    };
-
-    app.core.queue_submit(&[submit_info], frame_sync)?;
-
-    // Present
-    let present_info = vk::PresentInfoKHR {
-        wait_semaphore_count: 1,
-        p_wait_semaphores: &render_finished.semaphore,
-        swapchain_count: 1,
-        p_swapchains: &app.swapchain.swapchain,
-        p_image_indices: &image_index,
-        ..Default::default()
-    };
-
-    app.swapchain.queue_present(app.core._graphics_queue, &present_info)?;
-
-    Ok(())
-
-}
-
-pub fn shutdown_app(app: & mut VulkanApp, resources: &mut FrameResources) -> Result<(), &'static str> {
-    Ok(())
 }

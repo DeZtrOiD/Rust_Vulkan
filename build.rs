@@ -14,6 +14,8 @@ fn main() {
     let shaders = [
         ("vert.vert", "vert.spv"),
         ("frag.frag", "frag.spv"),
+        ("imgui.vert", "imgui_vert.spv"),
+        ("imgui.frag", "imgui_frag.spv"),
     ];
 
     for (src_name, dst_name) in shaders {
