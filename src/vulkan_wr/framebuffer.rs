@@ -19,16 +19,16 @@ impl VulkanFramebuffer {
     pub fn try_new(
         device: &Device,
         render_pass: vk::RenderPass,
-        attachments: &[VulkanImageView],
+        attachments: Vec<vk::ImageView>,
         extent: vk::Extent2D,
         layers: u32,
     ) -> Result<Self, &'static str> {
-        let att: Vec<vk::ImageView> = attachments.iter().map(|iv| iv.view).collect();
+        // let att: Vec<vk::ImageView> = attachments.iter().map(|iv| iv.view).collect();
 
         let info = vk::FramebufferCreateInfo {
             render_pass: render_pass,  // хендел RP с которым он будет использоваться 
-            attachment_count: att.len() as u32,
-            p_attachments: att.as_ptr(),
+            attachment_count: attachments.len() as u32,
+            p_attachments: attachments.as_ptr(),
             width: extent.width,  // все att должны быть не меньше
             height: extent.height,
             layers: layers,  // слои, для 2д - 1
@@ -41,7 +41,7 @@ impl VulkanFramebuffer {
 
         Ok(Self {
             framebuffer,
-            attachments: att,
+            attachments: attachments,
             extent,
             device: device.clone(),
         })

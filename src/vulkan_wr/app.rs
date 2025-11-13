@@ -7,32 +7,63 @@
 // TODO: надо что-то сделать с преедачей параметров везде
 // #=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#
 
-
+use ash::{vk, khr};
 use super::core::{VulkanCore, VulkanCoreBuilder};
 use super::swapchain::{VulkanSwapchain, VulkanSwapchainBuilder};
 use crate::vulkan_wr::command_pb::command_buffer::VulkanCommandBuffer;
+use crate::vulkan_wr::image::image_view::VulkanImageView;
 use crate::window::Window;
 use super::command_pb::command_pool::VulkanCommandPool;
-use ash::{vk, khr};
-use super::descriptor::descriptor_pool::VulaknDescriptorPool;
+use super::descriptor::{
+    descriptor_pool::VulaknDescriptorPool,
+    descriptor_set_layout::VulkanDescriptorSetLayout,
+    descriptor_set::VulkanDescriptorSet
+};
+
 use super::semaphore::VulkanSemaphore;
 use super::fence::VulkanFence;
-
+use super::framebuffer::VulkanFramebuffer;
+use super::render_pass::pass::VulkanRenderPass;
+use super::pipeline::{
+    pipeline::VulkanPipeline,
+    pipeline_layout::VulkanPipelineLayout
+};
+use super::buffer::buffer::VulkanBuffer;
 
 pub type AppVkResult<T> = Result<T, &'static str>;
 
 pub struct FrameResources {
+    pub vec_fence: Vec<VulkanFence>,  // CPU + GPU
     pub vec_sem: Vec<VulkanSemaphore>, // [image_available, render_finished, ...]
     pub vec_cmd: Vec<VulkanCommandBuffer>,
-    pub vec_fence: Vec<VulkanFence>,  // CPU + GPU
+
+    pub image_view: Vec<VulkanImageView>,
+    pub framebuffers: Vec<VulkanFramebuffer>, // one per swapchain image
+
+    pub render_pass: Option<VulkanRenderPass>,
+
+    pub descriptor_sets: Vec<VulkanDescriptorSet>,
+    pub pipeline: Option<VulkanPipeline>,
+    pub descriptor_set_layout: Vec<VulkanDescriptorSetLayout>,
+    pub pipeline_layout: Vec<VulkanPipelineLayout>,
+
+    pub uniform_buffers: Vec<VulkanBuffer>, // per-image UBO (float time)
+    pub vertex_buffer: Option<VulkanBuffer>,
+    pub index_buffer: Option<VulkanBuffer>,
+    pub index_count: u32,
+
+    pub depth_images: Vec<super::image::image::VulkanImage>,
+    pub depth_image_views: Vec<VulkanImageView>,
+
+    pub start_time: std::time::Instant,
 }
 
 pub struct VulkanApp {
-    pub descriptor_pool: VulaknDescriptorPool,
+    pub frame_index: usize,
     pub command_pool: VulkanCommandPool,
+    pub descriptor_pool: VulaknDescriptorPool,
     pub swapchain: VulkanSwapchain,
     pub core: VulkanCore,
-    pub frame_index: usize,
 }
 
 impl VulkanApp {
@@ -73,46 +104,46 @@ impl VulkanApp {
     // - framebuffers (по одному на swapchain image)
     // - vertex/uniform buffers
     // - загрузить текстуры (через staging + fence)
-    pub fn init(&mut self, init: fn(app: &mut VulkanApp) -> AppVkResult<()>) -> AppVkResult<()> {
-        init(self)
+    pub fn init(
+        &mut self,
+        init: fn(app: &mut VulkanApp, resources: &mut FrameResources) -> AppVkResult<()>,
+        resources: & mut FrameResources
+    ) -> AppVkResult<()> {
+        init(self, resources)
     }
 
-    pub fn update(&mut self, update: fn(app: &mut VulkanApp) -> AppVkResult<()>) -> AppVkResult<()> {
-        update(self)
-    }
-
-
-    pub fn record_render_graph(
+    pub fn update(
             &mut self,
-            render: fn(
-                app: &mut VulkanApp,
-                resources: &FrameResources
-            ) -> AppVkResult<()>,
-            resources: &FrameResources
+            update: fn(app: &mut VulkanApp, resources: &mut FrameResources) -> AppVkResult<()>,
+            resources: &mut FrameResources
         ) -> AppVkResult<()> {
-        
-        render(self, resources)
+        update(self, resources)
     }
 
-    pub fn submit_and_present(&mut self,
+    pub fn render(&mut self,
         present: fn(
             app: &mut VulkanApp,
-            resources: &FrameResources
+            resources: &mut FrameResources
         ) -> AppVkResult<()>,
-        resources: &FrameResources
+        resources: &mut FrameResources
     ) -> Result<(), &'static str> {
         self.frame_index = (self.frame_index + 1) % self.swapchain.images.len();
         present(self, resources)
     }
 
-    pub fn shutdown(&mut self, shutdown: fn(app: &mut VulkanApp) -> AppVkResult<()>) -> AppVkResult<()> {
-        shutdown(self)
+    pub fn shutdown(&mut self, shutdown: fn(
+            app: &mut VulkanApp,
+            resources: &mut FrameResources
+        ) -> AppVkResult<()>,
+        resources: &mut FrameResources
+    ) -> AppVkResult<()> {
+        shutdown(self, resources)
     }
 
     pub fn get_frame_resources(
             &self,
-            cmd_count: u32,
-            cmd_level: vk::CommandBufferLevel,
+            cmd_count_primary: u32,
+            cmd_count_secondary: u32,
             sem_count: u32,
             fence_count: u32
         ) -> AppVkResult<FrameResources>{
@@ -126,11 +157,32 @@ impl VulkanApp {
             vec_fence.push(VulkanFence::try_new(&self.core._logical_device, vk::FenceCreateFlags::SIGNALED)?);
         }
 
-        let vec_cmd = self.command_pool.allocate_command_buffers(cmd_count, cmd_level)?;
+        let mut vec_cmd = vec![];
+        if cmd_count_primary != 0 {
+            vec_cmd = self.command_pool.allocate_command_buffers(cmd_count_primary, vk::CommandBufferLevel::PRIMARY)?;
+        }
+        if cmd_count_secondary != 0 {
+            let mut tmp = self.command_pool.allocate_command_buffers(cmd_count_primary, vk::CommandBufferLevel::PRIMARY)?;
+            vec_cmd.append(&mut tmp);
+        }
         Ok(FrameResources {
             vec_sem: vec_sem,
             vec_cmd: vec_cmd,
             vec_fence: vec_fence,
+            image_view: vec![],
+            framebuffers: vec![], // one per swapchain image
+            render_pass: None,
+            pipeline: None,
+            pipeline_layout: vec![],
+            descriptor_set_layout: vec![],
+            descriptor_sets: vec![],
+            uniform_buffers: vec![], // per-image UBO (float time)
+            vertex_buffer: None,
+            index_buffer: None,
+            index_count: 0,
+            depth_image_views: vec![],
+            depth_images: vec![],
+            start_time: std::time::Instant::now()
         })
     }
 

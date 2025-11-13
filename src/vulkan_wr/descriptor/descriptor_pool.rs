@@ -88,7 +88,7 @@ impl VulaknDescriptorPool {
     /// # Аргументы
     /// * `descriptor_writes` — массив vk::WriteDescriptorSet для записи новых данных
     /// * `descriptor_copies` — массив vk::CopyDescriptorSet для копирования существующих дескрипторов
-    pub fn update_descriptor_sets<>(
+    pub fn update_descriptor_sets(
         &self,
         descriptor_writes: &[vk::WriteDescriptorSet],
         descriptor_copies: &[vk::CopyDescriptorSet],

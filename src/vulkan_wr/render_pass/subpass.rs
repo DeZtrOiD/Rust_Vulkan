@@ -70,7 +70,7 @@ impl SubpassConfigBuilder {
         self
     }
 
-    pub fn set_depth_stencil(mut self, attachment: vk::AttachmentReference) -> Self {
+    pub fn add_depth_stencil(mut self, attachment: vk::AttachmentReference) -> Self {
         self.depth_stencil = Some(attachment);
         self
     }

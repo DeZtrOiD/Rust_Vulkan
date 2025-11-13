@@ -7,6 +7,7 @@
 
 use ash::{vk, Device};
 
+#[derive(Clone)]
 pub struct VulkanDescriptorSetLayout {
     pub layout: vk::DescriptorSetLayout,
     _device: Device,

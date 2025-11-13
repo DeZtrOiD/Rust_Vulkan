@@ -36,7 +36,7 @@ impl VulkanBuffer {
     /// * props: vk::MemoryPropertyFlags,  - свойства памяти HOST_VISIBLE | HOST_COHERENT etc <br>
     /// * flags: Option<vk::BufferCreateFlags>,  - какие-то флаги для тонкой настройки расположения в памяти буффера <br>
     /// * p_qf_indices:  Option<*const u32>   указывает какие семейства очередей могут использовать буффер <br>
-    /// sharing_mode: Option<vk::SharingMode>, - могут ли несколько семей его разделять
+    /// * sharing_mode: Option<vk::SharingMode>, - могут ли несколько семей его разделять
     pub(in crate::vulkan_wr) fn try_new(
             core: &VulkanCore,
             size: vk::DeviceSize,
@@ -63,7 +63,7 @@ impl VulkanBuffer {
 
         let memory = core.allocate_memory(
             requirements.size,  // реальный размер
-            requirements.memory_type_bits,  // битовая маска тех memory_types которе (не) поддерживают данный тип/ресурс
+            requirements.memory_type_bits,  // битовая маска тех memory_types которые (не) поддерживают данный тип/ресурс
             props
         )?;
         // 0 смещение в памяти с которого начинается буффер, если memory использовать для нескольких ресурсов
@@ -73,18 +73,18 @@ impl VulkanBuffer {
         Ok(Self { buffer, memory, size, device: core._logical_device.clone() })
     }
 
-    /// Копирует данные CPU → GPU через map/unmap.
+    /// Копирует данные CPU -> GPU через map/unmap.
     ///
     /// # Аргументы
-    /// * `data` — срез копируемых структур.
-    /// * `offset` — смещение внутри буфера (по умолчанию 0).
-    /// * `flush` — выполнить `flush_mapped_memory_ranges`, если память не coherent.
-    /// * `map_flags` — флаги для `vkMapMemory` (обычно `empty()`).
+    /// * `data` - срез копируемых структур.
+    /// * `offset` - смещение внутри буфера (по умолчанию 0).
+    /// * `flush` - выполнить `flush_mapped_memory_ranges`, если память не coherent.
+    /// * `map_flags` - флаги для `vkMapMemory` (обычно `empty()`).
     ///
     /// # Безопасность
     /// Проверяет размер копируемых данных, но не гарантирует корректность выравнивания.
-    /// Ошибка в размерах → panic или undefined behavior внутри Vulkan.
-    pub unsafe fn map_copy<T>(
+    /// Ошибка в размерах - panic или undefined behavior внутри Vulkan.
+    pub unsafe fn mem_copy<T>(
         &self,
         data: &[T],
         offset: Option<vk::DeviceSize>,

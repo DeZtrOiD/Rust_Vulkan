@@ -13,3 +13,4 @@ pub mod framebuffer;
 pub mod semaphore;
 pub mod fence;
 pub mod render_func;
+pub mod vertex;

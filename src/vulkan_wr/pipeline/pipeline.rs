@@ -86,7 +86,7 @@ impl<'a> VulkanPipelineBuilder<'a> {
             rasterizer_discard_enable: vk::FALSE,  // TRUE отключает растеризацию и все что после. Нужно для каких-то особых вычислений 
             polygon_mode: vk::PolygonMode::FILL,
             line_width: 1.0,
-            cull_mode: vk::CullModeFlags::BACK,
+            cull_mode:vk::CullModeFlags::NONE, // vk::CullModeFlags::BACK,
             front_face: vk::FrontFace::COUNTER_CLOCKWISE,
             depth_bias_enable: vk::FALSE,  // для борьбы с z-fighting
             ..Default::default()
@@ -110,7 +110,12 @@ impl<'a> VulkanPipelineBuilder<'a> {
         let color_blend_attachment = vk::PipelineColorBlendAttachmentState {
             color_write_mask: vk::ColorComponentFlags::RGBA,
             blend_enable: vk::FALSE,
-            ..Default::default()
+            src_color_blend_factor: vk::BlendFactor::ONE,
+            dst_color_blend_factor: vk::BlendFactor::ZERO,
+            color_blend_op: vk::BlendOp::ADD,
+            src_alpha_blend_factor: vk::BlendFactor::ONE,
+            dst_alpha_blend_factor: vk::BlendFactor::ZERO,
+            alpha_blend_op: vk::BlendOp::ADD,
         };
 
         let color_blend = vk::PipelineColorBlendStateCreateInfo {
@@ -164,6 +169,11 @@ impl<'a> VulkanPipelineBuilder<'a> {
         self
     }
 
+    pub fn with_viewport_state(mut self, viewport: vk::PipelineViewportStateCreateInfo<'a>) -> Self {
+        self.viewport_state = viewport;
+        self
+    }
+
     pub fn with_multisampling(mut self, state: vk::PipelineMultisampleStateCreateInfo<'a>) -> Self {
         self.multisampling = state;
         self
@@ -175,6 +185,12 @@ impl<'a> VulkanPipelineBuilder<'a> {
     }
 
     pub fn with_color_blend(mut self, state: vk::PipelineColorBlendStateCreateInfo<'a>) -> Self {
+        if state.p_attachments.is_null() {
+            panic!("NULL DEREFERENCE VulkanPipelineBuilder::with_color_blend");
+        };
+        self.color_blend_attachment = unsafe {
+            *(state.p_attachments)
+        };
         self.color_blend = state;
         self
     }
@@ -194,7 +210,9 @@ impl<'a> VulkanPipelineBuilder<'a> {
         self
     }
 
-    pub fn build(self) -> Result<VulkanPipeline, &'static str> {
+    pub fn build(mut self) -> Result<VulkanPipeline, &'static str> {
+
+        self.color_blend.p_attachments = &self.color_blend_attachment;
 
         let create_info = vk::GraphicsPipelineCreateInfo {
             stage_count: self.shader_stages.len() as u32,

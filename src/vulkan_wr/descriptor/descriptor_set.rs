@@ -14,7 +14,6 @@ pub struct VulkanDescriptorSet {
 }
 
 impl VulkanDescriptorSet {
-
     /// Создает запись для обновления uniform/storage буфера в DescriptorSet
     /// # Аргументы
     /// * `binding` - индекс binding в DescriptorSet, куда помещается буфер.
@@ -29,14 +28,14 @@ impl VulkanDescriptorSet {
         offset: vk::DeviceSize,
         range: vk::DeviceSize,
         descriptor_type: vk::DescriptorType,
-    ) -> vk::WriteDescriptorSet<'_> {
+    ) -> (vk::WriteDescriptorSet<'_>, vk::DescriptorBufferInfo) {
         let buffer_info = vk::DescriptorBufferInfo {
             buffer,
             offset,
             range,
         };
 
-        vk::WriteDescriptorSet {
+        (vk::WriteDescriptorSet {
             dst_set: self.set,
             dst_binding: binding,
             dst_array_element: 0,
@@ -44,7 +43,7 @@ impl VulkanDescriptorSet {
             descriptor_type: descriptor_type,
             p_buffer_info: &buffer_info,
             ..Default::default()
-        }
+        }, buffer_info)
     }
 
     /// Создает структуру `vk::WriteDescriptorSet` обновления для комбинированного image sampler.

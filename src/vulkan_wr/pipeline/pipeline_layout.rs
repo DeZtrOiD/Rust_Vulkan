@@ -16,9 +16,9 @@ pub struct VulkanPipelineLayout {
 impl VulkanPipelineLayout {
     pub fn try_new(
         device: &Device,
-        set_layouts: &[&VulkanDescriptorSetLayout],
+        set_layouts: &[VulkanDescriptorSetLayout],
         push_constant_ranges: &[vk::PushConstantRange],
-    ) -> ash::prelude::VkResult<Self> {
+    ) -> Result<Self, &'static str> {
 
         // нужен послеовательный блок памяти с ними
         let raw_layouts: Vec<vk::DescriptorSetLayout> =
@@ -33,7 +33,7 @@ impl VulkanPipelineLayout {
         };
 
         let layout = unsafe {
-            device.create_pipeline_layout(&create_info, None)?
+            device.create_pipeline_layout(&create_info, None).map_err(|_| "Err create_pipeline_layout")?
         };
 
         Ok(Self {
