@@ -1,9 +1,12 @@
 
+use crate::vulkan_wr::sampler::VulkanSamplerBuilder;
+
 use super::{
     frame_resources::FrameResources,
     uniform::Uniforms
 };
 use super::super::super::vulkan_wr::{
+    ImGui_wr::VulkanImgui,
     app::VulkanApp,
     render_pass::{subpass::SubpassConfigBuilder, pass::VulkanRenderPass},
     descriptor::descriptor_set_layout::VulkanDescriptorSetLayout,
@@ -12,14 +15,14 @@ use super::super::super::vulkan_wr::{
     buffer::buffer::VulkanBuffer,
     framebuffer::VulkanFramebuffer,
     image::{image_view::VulkanImageViewBuilder, image::VulkanImageBuilder},
-    types::vertex::Vertex
+    types::vertex::Vertex,
 };
+use std::mem::size_of;
+use ash::vk;
+use imgui::internal::RawWrapper;
 
 
 pub fn init_app(app: &mut VulkanApp, resources: &mut FrameResources) -> Result<(), &'static str> {
-
-    use std::mem::size_of;
-    use ash::vk;
 
     // 1. Render pass
     // vk::AttachmentDescription метаинфа одного вложения в рендерпасе
@@ -363,30 +366,77 @@ pub fn init_app(app: &mut VulkanApp, resources: &mut FrameResources) -> Result<(
         &[]
     );
 
-    // 10. Запись команд для каждого изображения в свопчейне
-    for (i, cmd) in resources.vec_cmd.iter().enumerate() {
-        cmd.begin(vk::CommandBufferUsageFlags::SIMULTANEOUS_USE, None)?;
-        let clear_values = [
-            vk::ClearValue { color: vk::ClearColorValue { float32: [0.0, 0.51, 0.12, 1.0] } },
-            vk::ClearValue { depth_stencil: vk::ClearDepthStencilValue { depth: 1.0, stencil: 0 } }
-        ];
-        let begin_info = vk::RenderPassBeginInfo {
+    // ----- IMGUI ------
+    let mut _imgui = VulkanImgui::try_new(app, resources.render_pass.as_ref().unwrap())?;
+    // атлас текстур
+    let upload_cmd = &resources.vec_cmd_primary[0];
+    upload_cmd.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT, None)?;
+    // Копирование из staging buffer в атлас. это должно быть один раз
+    unsafe {
+        upload_cmd._device.cmd_pipeline_barrier(
+            upload_cmd._buffer,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::FRAGMENT_SHADER,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &[_imgui.barriers.0]
+        );
+
+        // копирование шрифтов 
+        upload_cmd._device.cmd_copy_buffer_to_image(
+            upload_cmd._buffer,
+            _imgui.staging_buffer.buffer,
+            _imgui.font_image.image,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            &[_imgui.copy_region]
+        );
+
+        upload_cmd._device.cmd_pipeline_barrier(
+            upload_cmd._buffer,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::FRAGMENT_SHADER,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &[_imgui.barriers.1]
+        );
+    }
+    upload_cmd.end()?;
+
+    let fence = &resources.vec_fence[0];
+
+    let submit_info = vk::SubmitInfo {
+        // wait_semaphore_count: 1,
+        // p_wait_semaphores: &image_available.semaphore,
+        // p_wait_dst_stage_mask: wait_stages.as_ptr(),
+        command_buffer_count: 1,
+        p_command_buffers: &upload_cmd._buffer,
+        // signal_semaphore_count: 1,
+        // p_signal_semaphores: &render_finished.semaphore,
+        ..Default::default()
+    };
+    unsafe {
+        app.core._logical_device.reset_fences(&[fence.fence]).map_err(|_| "Err upload_cmd::reset_fences")?;
+    }
+    app.core.queue_submit(&[submit_info], fence.fence)?;
+    unsafe {
+        app.core._logical_device.wait_for_fences(&[fence.fence], true, u64::MAX).map_err(|_| "Err upload_cmd::wait_for_fences")?;
+    }
+
+    // 10. Запись команд для каждого изображения в свопчейне для сферы
+    for (i, cmd) in resources.vec_cmd_secondary.iter().enumerate() {
+        let inheritance_info = vk::CommandBufferInheritanceInfo {
             render_pass: resources.render_pass.as_ref().unwrap().render_pass,
+            subpass: 0,
             framebuffer: resources.framebuffers[i].framebuffer,
-            render_area: vk::Rect2D {
-                offset: vk::Offset2D { x: 0, y: 0 },
-                extent: app.swapchain.extent
-            },
-            clear_value_count: clear_values.len() as u32,
-            p_clear_values: clear_values.as_ptr(),
             ..Default::default()
         };
+        cmd.begin(
+            vk::CommandBufferUsageFlags::SIMULTANEOUS_USE | vk::CommandBufferUsageFlags::RENDER_PASS_CONTINUE,
+            Some(&inheritance_info)
+        )?;
         unsafe {
-            cmd._device.cmd_begin_render_pass(
-                cmd._buffer,
-                &begin_info,
-                vk::SubpassContents::INLINE  // specifying how the commands in the first subpass will be provided.
-            );
             cmd._device.cmd_bind_pipeline(
                 cmd._buffer,
                 vk::PipelineBindPoint::GRAPHICS,
@@ -423,11 +473,29 @@ pub fn init_app(app: &mut VulkanApp, resources: &mut FrameResources) -> Result<(
                 0,  // офсет в вершинах
                 0  // первый инстанс
             );
-            cmd._device.cmd_end_render_pass(cmd._buffer);
         }
         cmd.end()?;
     }
 
+    // for (i, cmd) in resources.vec_cmd_secondary_imgui.iter().enumerate() {
+    //     let inheritance_info = vk::CommandBufferInheritanceInfo {
+    //         render_pass: resources.render_pass.as_ref().unwrap().render_pass,
+    //         subpass: 0,
+    //         framebuffer: resources.framebuffers[i].framebuffer,
+    //         ..Default::default()
+    //     };
+        
+    //     // Важно: эти buffers будут перезаписываться каждый кадр
+    //     cmd.begin(
+    //         vk::CommandBufferUsageFlags::RENDER_PASS_CONTINUE 
+    //             | vk::CommandBufferUsageFlags::SIMULTANEOUS_USE,
+    //         Some(&inheritance_info)
+    //     )?;
+    //     // Пока оставляем пустыми, они будут перезаписаны в render_frame_app
+    //     cmd.end()?;
+    // }
+
+    resources._imgui = Some(_imgui);
     resources.start_time = std::time::Instant::now();
 
     Ok(())

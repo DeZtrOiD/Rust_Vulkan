@@ -25,14 +25,15 @@ pub struct VulkanApp {
     pub descriptor_pool: VulaknDescriptorPool,
     pub swapchain: VulkanSwapchain,
     pub core: VulkanCore,
+    pub window: Window,
 }
 
 impl VulkanApp {
-    pub fn try_new(window: &Window, app_name: &str) -> AppVkResult<Self> {
+    pub fn try_new(window: Window, app_name: &str) -> AppVkResult<Self> {
         let vk_core = VulkanCoreBuilder::new(app_name)
             .api_version(1, 2, 0)
             .enable_validation(cfg!(debug_assertions))
-            .build(window)?;
+            .build(&window)?;
         let vk_swapchain = VulkanSwapchainBuilder::new(&vk_core)
             .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST)
             .build()?;
@@ -43,18 +44,31 @@ impl VulkanApp {
             vk_core._graphics_queue_index,
             vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER
         )?;
-        
-        let pool_size = vec![vk::DescriptorPoolSize {
-            ty: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: 4 as u32
-        }];
-        let dsc_pool = VulaknDescriptorPool::try_new(&vk_core._logical_device, &pool_size,  5 as u32, None)?;
+
+        let pool_size = vec![
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: vk_swapchain.images.len() as u32 * 2
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                descriptor_count: vk_swapchain.images.len() as u32
+            },
+        ];
+        let max_sets = vk_swapchain.images.len() as u32 * 3;
+        let dsc_pool = VulaknDescriptorPool::try_new(
+            &vk_core._logical_device,
+            &pool_size, 
+            max_sets,
+            None
+        )?;
         Ok( Self {
             core: vk_core,
             swapchain: vk_swapchain,
             command_pool: cmd_pool,
             descriptor_pool: dsc_pool,
             frame_index: 0,
+            window: window,
         })
     }
 
@@ -78,6 +92,7 @@ impl VulkanApp {
             update: fn(app: &mut VulkanApp, resources: &mut R) -> AppVkResult<()>,
             resources: &mut R
         ) -> AppVkResult<()> {
+        self.window.process_events();
         update(self, resources)
     }
 
@@ -103,24 +118,15 @@ impl VulkanApp {
 
     pub fn get_frame_resources<R: SceneResources>(
             &self,
-            cmd_count_primary: u32,
-            cmd_count_secondary: u32,
-            sem_count: u32,
-            fence_count: u32,
+            image_count: u32,
             func: fn(
                 app: &VulkanApp,
-                cmd_count_primary: u32,
-                cmd_count_secondary: u32,
-                sem_count: u32,
-                fence_count: u32,
+                image_count: u32
             ) -> AppVkResult<R>
         ) -> AppVkResult<R>{
             func(
                 &self,
-                cmd_count_primary,
-                cmd_count_secondary,
-                sem_count,
-                fence_count
+                image_count
             )
     }
 
@@ -132,6 +138,10 @@ impl VulkanApp {
         unsafe {
             self.core._logical_device.device_wait_idle().map_err(|_| "Err device_wait_idle")
         }
+    }
+
+    pub fn should_close(&self) -> bool {
+        self.window.should_close()
     }
 
 }

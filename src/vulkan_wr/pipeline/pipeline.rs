@@ -63,6 +63,8 @@ pub struct VulkanPipelineBuilder<'a> {
     subpass: u32,
     /// Layout пайплайна (описывает дескрипторы и push-константы)
     pipeline_layout: vk::PipelineLayout,
+
+    p_dynamic_state: vk::PipelineDynamicStateCreateInfo<'a>,
 }
 
 impl<'a> VulkanPipelineBuilder<'a> {
@@ -146,6 +148,7 @@ impl<'a> VulkanPipelineBuilder<'a> {
             subpass: 0,
             pipeline_layout: layout,
             tessellation: tessellation,
+            p_dynamic_state: vk::PipelineDynamicStateCreateInfo::default(),
         }
     }
 
@@ -210,6 +213,11 @@ impl<'a> VulkanPipelineBuilder<'a> {
         self
     }
 
+    pub fn with_dynamic_states(mut self, dynamic_state_info: vk::PipelineDynamicStateCreateInfo<'a>) -> Self {
+        self.p_dynamic_state = dynamic_state_info;
+        self
+    }
+
     pub fn build(mut self) -> Result<VulkanPipeline, &'static str> {
 
         self.color_blend.p_attachments = &self.color_blend_attachment;
@@ -230,6 +238,7 @@ impl<'a> VulkanPipelineBuilder<'a> {
             layout: self.pipeline_layout,
             render_pass: self.render_pass,
             subpass: self.subpass,
+            p_dynamic_state: &self.p_dynamic_state,
             ..Default::default()
         };
 

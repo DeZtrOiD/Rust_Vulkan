@@ -1,7 +1,7 @@
 // imgui.vert
 #version 450
 
-layout(binding = 1) uniform Ubo {
+layout(binding = 0) uniform Ubo {
     vec2 scale;
     vec2 translate;
 } ubo;

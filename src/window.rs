@@ -13,6 +13,44 @@ use glfw::{ Glfw, GlfwReceiver, PWindow, WindowEvent, WindowMode, Key,
 use ash::vk::{ self, Handle };
 use ash::{ Instance };
 
+
+const KEY_CODES: &[Key] = &[
+    Key::Space,
+    Key::Apostrophe,
+    Key::Comma,
+    Key::Minus,
+    Key::Period,
+    Key::Slash,
+    Key::Num0, Key::Num1, Key::Num2, Key::Num3, Key::Num4,
+    Key::Num5, Key::Num6, Key::Num7, Key::Num8, Key::Num9,
+    Key::Semicolon,
+    Key::Equal,
+    Key::A, Key::B, Key::C, Key::D, Key::E, Key::F, Key::G, Key::H, Key::I, Key::J,
+    Key::K, Key::L, Key::M, Key::N, Key::O, Key::P, Key::Q, Key::R, Key::S, Key::T,
+    Key::U, Key::V, Key::W, Key::X, Key::Y, Key::Z,
+    Key::LeftBracket,
+    Key::Backslash,
+    Key::RightBracket,
+    Key::GraveAccent,
+    Key::World1, Key::World2,
+
+    // Функциональные клавиши
+    Key::Escape, Key::Enter, Key::Tab, Key::Backspace, Key::Insert, Key::Delete,
+    Key::Right, Key::Left, Key::Down, Key::Up,
+    Key::PageUp, Key::PageDown, Key::Home, Key::End,
+    Key::CapsLock, Key::ScrollLock, Key::NumLock,
+    Key::PrintScreen, Key::Pause,
+    Key::F1, Key::F2, Key::F3, Key::F4, Key::F5, Key::F6,
+    Key::F7, Key::F8, Key::F9, Key::F10, Key::F11, Key::F12,
+    Key::F13, Key::F14, Key::F15, Key::F16, Key::F17, Key::F18, Key::F19, Key::F20,
+    Key::F21, Key::F22, Key::F23, Key::F24, Key::F25,
+
+    // Модификаторы (отдельно!)
+    Key::LeftShift, Key::LeftControl, Key::LeftAlt, Key::LeftSuper,
+    Key::RightShift, Key::RightControl, Key::RightAlt, Key::RightSuper,
+    Key::Menu,
+];
+
 pub type MWResult<T> = Result<T, &'static str>;
 pub struct Window {
     _window: PWindow,
@@ -97,5 +135,27 @@ impl Window {
         }
         // конвертация С-строк в вектор очень интересная идея, без которой нельзя гарантировать отсутвие UB, если почему-то GLFW отвалится раньше запроса на create_instance. Но насколько такая ситуация вооще возможна?
         // self._glfw.get_required_instance_extensions()
+    }
+
+    pub fn update_imgui_io(&mut self, io: &mut imgui::Io) {
+        let (w, h) = (self._width, self._height);
+        io.display_size = [w as f32, h as f32];
+        io.display_framebuffer_scale = [1.0, 1.0];
+
+        let (mx, my) = self._window.get_cursor_pos();
+        io.mouse_pos = [mx as f32, my as f32];
+        io.mouse_down[0] = self._window.get_mouse_button( glfw::MouseButtonLeft ) == glfw::Action::Press;
+        io.mouse_down[1] = self._window.get_mouse_button( glfw::MouseButtonRight ) == glfw::Action::Press;
+
+        // Колесико тут не обрабатывается
+
+        for i in 0..KEY_CODES.len() {
+            io.keys_down[i] = self._window.get_key( KEY_CODES[i] ) == glfw::Action::Press;
+        }
+
+        io.key_alt = self._window.get_key( glfw::Key::LeftAlt ) == glfw::Action::Press;
+        io.key_ctrl = self._window.get_key( glfw::Key::LeftControl ) == glfw::Action::Press;
+        io.key_shift = self._window.get_key( glfw::Key::LeftShift ) == glfw::Action::Press;
+        io.key_super = self._window.get_key( glfw::Key::LeftSuper ) == glfw::Action::Press;
     }
 }

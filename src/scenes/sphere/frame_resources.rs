@@ -12,13 +12,16 @@ use super::super::super::vulkan_wr::{
     sync::{
         semaphore::VulkanSemaphore,
         fence::VulkanFence,
-    }
+    },
+    sampler::VulkanSampler,
+    ImGui_wr::VulkanImgui,
 };
 
 pub struct FrameResources {
     pub vec_fence: Vec<VulkanFence>,  // CPU + GPU
     pub vec_sem: Vec<VulkanSemaphore>, // [image_available, render_finished, ...]
-    pub vec_cmd: Vec<VulkanCommandBuffer>,
+    pub vec_cmd_primary: Vec<VulkanCommandBuffer>,
+    pub vec_cmd_secondary: Vec<VulkanCommandBuffer>,
 
     pub image_view: Vec<VulkanImageView>,
     pub framebuffers: Vec<VulkanFramebuffer>, // one per swapchain image
@@ -39,17 +42,24 @@ pub struct FrameResources {
     pub depth_image_views: Vec<VulkanImageView>,
 
     pub start_time: std::time::Instant,
+
+    pub _imgui: Option<VulkanImgui>,
+    pub vec_cmd_secondary_imgui: Vec<VulkanCommandBuffer>,
 }
 
 impl SceneResources for FrameResources {}
 
 pub fn get_frame_resources(
         app: &VulkanApp,
-        cmd_count_primary: u32,
-        cmd_count_secondary: u32,
-        sem_count: u32,
-        fence_count: u32
+        image_count: u32,
     ) -> Result<FrameResources, &'static str>{
+    
+    let cmd_count_primary: u32 = image_count;
+    let cmd_count_secondary: u32 = image_count; // основной рендер + imgui
+    let cmd_count_secondary_imgui: u32 = image_count; // основной рендер + imgui
+    let sem_count: u32 = image_count * 2;  // 2 семафора на картнику 
+    let fence_count: u32 = image_count * 2; 
+
     let mut vec_sem = vec![];
     for _ in 0..sem_count {
         vec_sem.push(VulkanSemaphore::try_new(&app.core._logical_device)?);
@@ -60,17 +70,24 @@ pub fn get_frame_resources(
         vec_fence.push(VulkanFence::try_new(&app.core._logical_device, vk::FenceCreateFlags::SIGNALED)?);
     }
 
-    let mut vec_cmd = vec![];
+    let mut vec_cmd_primary = vec![];
     if cmd_count_primary != 0 {
-        vec_cmd = app.command_pool.allocate_command_buffers(cmd_count_primary, vk::CommandBufferLevel::PRIMARY)?;
+        vec_cmd_primary = app.command_pool.allocate_command_buffers(cmd_count_primary, vk::CommandBufferLevel::PRIMARY)?;
     }
+    let mut vec_cmd_secondary = vec![];
     if cmd_count_secondary != 0 {
-        let mut tmp = app.command_pool.allocate_command_buffers(cmd_count_primary, vk::CommandBufferLevel::PRIMARY)?;
-        vec_cmd.append(&mut tmp);
+        let mut tmp = app.command_pool.allocate_command_buffers(cmd_count_primary, vk::CommandBufferLevel::SECONDARY)?;
+        vec_cmd_secondary.append(&mut tmp);
+    }
+    let mut vec_cmd_secondary_imgui = vec![];
+    if cmd_count_secondary_imgui != 0 {
+        let mut tmp = app.command_pool.allocate_command_buffers(cmd_count_primary, vk::CommandBufferLevel::SECONDARY)?;
+        vec_cmd_secondary_imgui.append(&mut tmp);
     }
     Ok(FrameResources {
         vec_sem: vec_sem,
-        vec_cmd: vec_cmd,
+        vec_cmd_primary: vec_cmd_primary,
+        vec_cmd_secondary: vec_cmd_secondary,
         vec_fence: vec_fence,
         image_view: vec![],
         framebuffers: vec![], // one per swapchain image
@@ -85,6 +102,9 @@ pub fn get_frame_resources(
         index_count: 0,
         depth_image_views: vec![],
         depth_images: vec![],
-        start_time: std::time::Instant::now()
+        
+        _imgui: None,
+        vec_cmd_secondary_imgui: vec_cmd_secondary_imgui,
+        start_time: std::time::Instant::now(),
     })
 }

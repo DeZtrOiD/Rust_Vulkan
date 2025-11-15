@@ -5,9 +5,9 @@ use super::{
 };
 use super::super::super::vulkan_wr::{
     app::VulkanApp,
-    types::{matrix::Matrix, rotation_matrix::RotationMatrix}
+    types::{matrix::Matrix, rotation_matrix::RotationMatrix},
+    ImGui_wr::ImGUIUniform,
 };
-
 
 pub fn update_app(app: &mut VulkanApp, resources: &mut FrameResources) -> Result<(), &'static str> {
     let time = (std::time::Instant::now() - resources.start_time).as_secs_f32();
@@ -22,5 +22,6 @@ pub fn update_app(app: &mut VulkanApp, resources: &mut FrameResources) -> Result
             ub.mem_copy(&[u], None, None, None)?;
         }
     }
+
     Ok(())
 }
