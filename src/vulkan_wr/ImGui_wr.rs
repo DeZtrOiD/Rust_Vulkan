@@ -506,18 +506,23 @@ impl VulkanImgui {
             let ui = self.context.frame();
             
             // Демо-окно ImGui
-            ui.show_demo_window(&mut true);
+            // ui.show_demo_window(&mut true);
             
             // Пользовательское окно
             ui.window("Test").build(|| {
                 ui.text("Sphere Controls");
                 ui.button("OK");
-                // ui.text_colored([1.0, 0.0, 0.0, 1.0], "Debug");
             });
             // Рендеринг ImGui
             draw_data = self.context.render();
         }
-        
+
+        if draw_data.draw_lists_count() == 0 {
+            cmd_secondary_imgui.end()?;
+            return Ok(());
+        }
+
+
         unsafe {
             // Перезапись secondary командного буфера для ImGui
             cmd_secondary_imgui.reset(None)?;
@@ -588,6 +593,8 @@ impl VulkanImgui {
                 0,
                 index_type
             );
+
+
             let mut vertex_offset = 0;
             let mut index_offset = 0;
             // Рендеринг каждого draw list из ImGui
