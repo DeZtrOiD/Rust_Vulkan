@@ -375,7 +375,7 @@ pub fn init_app(app: &mut VulkanApp, resources: &mut FrameResources) -> Result<(
     unsafe {
         upload_cmd._device.cmd_pipeline_barrier(
             upload_cmd._buffer,
-            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::TOP_OF_PIPE,
             vk::PipelineStageFlags::FRAGMENT_SHADER,
             vk::DependencyFlags::empty(),
             &[],
@@ -394,7 +394,7 @@ pub fn init_app(app: &mut VulkanApp, resources: &mut FrameResources) -> Result<(
 
         upload_cmd._device.cmd_pipeline_barrier(
             upload_cmd._buffer,
-            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::TOP_OF_PIPE,
             vk::PipelineStageFlags::FRAGMENT_SHADER,
             vk::DependencyFlags::empty(),
             &[],
@@ -476,24 +476,6 @@ pub fn init_app(app: &mut VulkanApp, resources: &mut FrameResources) -> Result<(
         }
         cmd.end()?;
     }
-
-    // for (i, cmd) in resources.vec_cmd_secondary_imgui.iter().enumerate() {
-    //     let inheritance_info = vk::CommandBufferInheritanceInfo {
-    //         render_pass: resources.render_pass.as_ref().unwrap().render_pass,
-    //         subpass: 0,
-    //         framebuffer: resources.framebuffers[i].framebuffer,
-    //         ..Default::default()
-    //     };
-        
-    //     // Важно: эти buffers будут перезаписываться каждый кадр
-    //     cmd.begin(
-    //         vk::CommandBufferUsageFlags::RENDER_PASS_CONTINUE 
-    //             | vk::CommandBufferUsageFlags::SIMULTANEOUS_USE,
-    //         Some(&inheritance_info)
-    //     )?;
-    //     // Пока оставляем пустыми, они будут перезаписаны в render_frame_app
-    //     cmd.end()?;
-    // }
 
     resources._imgui = Some(_imgui);
     resources.start_time = std::time::Instant::now();

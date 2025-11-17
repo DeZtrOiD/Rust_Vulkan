@@ -111,10 +111,14 @@ impl VulkanBuffer {
                 .map_err(|_| "map_memory failed")?;
 
             // копирование
+            let tmp = data.as_ptr() as *const u8;
+            let tmp2 = ptr as *mut u8; 
             std::ptr::copy_nonoverlapping(
-                data.as_ptr() as *const _,
-                ptr as *mut _,
-                data.len(),
+                // data.as_ptr() as *const
+                tmp,
+                // ptr as *mut
+                tmp2,
+                data_size as usize,
             );
 
             if do_flush {

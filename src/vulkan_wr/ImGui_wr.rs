@@ -87,6 +87,8 @@ pub struct VulkanImgui {
     pub staging_buffer: VulkanBuffer,
     pub vertex_buffer: VulkanBuffer,
     pub index_buffer: VulkanBuffer,
+    pub vertex_vec: Vec<VulkanBuffer>,
+    pub index_vec: Vec<VulkanBuffer>,
     pub font_image: VulkanImage,
     pub font_image_view: VulkanImageView,
     pub sampler: VulkanSampler,
@@ -108,14 +110,14 @@ impl VulkanImgui {
         let staging_buffer = VulkanBuffer::try_new(
             &app.core,
             (atlas.data.len() * size_of::<u8>()) as u64,
-            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::BufferUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             None, None, None, None
         )?;
 
         unsafe {
             staging_buffer.mem_copy(atlas.data, None, None, None)?;
-        }    
+        }
 
         let font_extent = vk::Extent3D {
                 width: atlas.width,
@@ -187,6 +189,8 @@ impl VulkanImgui {
 
         // 11.4. Растеризатор
         let imgui_rasterizer = vk::PipelineRasterizationStateCreateInfo {
+            depth_clamp_enable: 0,
+            rasterizer_discard_enable: 0,
             polygon_mode: vk::PolygonMode::FILL,
             cull_mode: vk::CullModeFlags::NONE,
             front_face: vk::FrontFace::COUNTER_CLOCKWISE,
@@ -196,6 +200,7 @@ impl VulkanImgui {
 
         // 11.5. Multisampling
         let imgui_multisampling = vk::PipelineMultisampleStateCreateInfo {
+            sample_shading_enable: 0,
             rasterization_samples: vk::SampleCountFlags::TYPE_1,
             ..Default::default()
         };
@@ -220,7 +225,7 @@ impl VulkanImgui {
         };
 
         let imgui_color_blend = vk::PipelineColorBlendStateCreateInfo {
-            logic_op_enable: vk::FALSE,
+            logic_op_enable: 0,
             attachment_count: 1,
             p_attachments: &imgui_color_blend_attachment,
             ..Default::default()
@@ -236,20 +241,20 @@ impl VulkanImgui {
 
         // 11.9. Descriptor set layout для ImGui
         let imgui_desc_vec = vec![
-            // Uniform буфер для scale/translation
-            vk::DescriptorSetLayoutBinding {
-                binding: 0,
-                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                descriptor_count: 1,
-                stage_flags: vk::ShaderStageFlags::VERTEX,
-                ..Default::default()
-            },
             // Текстура шрифта
             vk::DescriptorSetLayoutBinding {
-                binding: 1,
+                binding: 0,
                 descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                 descriptor_count: 1,
                 stage_flags: vk::ShaderStageFlags::FRAGMENT,
+                ..Default::default()
+            },
+            // Uniform буфер для scale/translation
+            vk::DescriptorSetLayoutBinding {
+                binding: 1,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::VERTEX,
                 ..Default::default()
             }
         ];
@@ -281,9 +286,10 @@ impl VulkanImgui {
         .with_depth_stencil(imgui_depth_stencil)
         .with_color_blend(imgui_color_blend)
         .with_dynamic_states(imgui_dynamic_state_info) // Добавляем метод для динамических состояний
-        .with_input_assembly(vk::PipelineInputAssemblyStateCreateInfo {
-            topology: vk::PrimitiveTopology::TRIANGLE_LIST,
-            primitive_restart_enable: vk::FALSE,
+        .with_input_assembly(
+            vk::PipelineInputAssemblyStateCreateInfo {
+                topology: vk::PrimitiveTopology::TRIANGLE_LIST,
+                primitive_restart_enable: vk::FALSE,
             ..Default::default()
         })
         .with_subpass(0)
@@ -362,6 +368,18 @@ impl VulkanImgui {
             None, None, None, None
         )?;
 
+        let mut vertex_vec = vec![];
+        for _ in 0..app.swapchain.images.len() {
+            let buf = VulkanBuffer::try_new(
+                &app.core,
+                vertex_buffer_size,
+                vk::BufferUsageFlags::VERTEX_BUFFER,
+                vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+                None, None, None, None
+            )?;
+            vertex_vec.push(buf);
+        }
+
         let index_buffer = VulkanBuffer::try_new(
             &app.core,
             index_buffer_size,
@@ -369,6 +387,18 @@ impl VulkanImgui {
             vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
             None, None, None, None
         )?;
+
+        let mut index_vec = vec![];
+        for _ in 0..app.swapchain.images.len() {
+            let buf = VulkanBuffer::try_new(
+                &app.core,
+                index_buffer_size,
+                vk::BufferUsageFlags::INDEX_BUFFER,
+                vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+                None, None, None, None
+            )?;
+            index_vec.push(buf);
+        }
 
         let mut imgui_descriptor_sets = vec![];
         // 15. Создание descriptor sets для ImGui
@@ -384,7 +414,7 @@ impl VulkanImgui {
         for i in 0..imgui_descriptor_sets.len() {
             // Обновление uniform буфера
             let (mut write_uniform, buf_info) = imgui_descriptor_sets[i].write_buffer(
-                0,
+                1,
                 imgui_uniform_buffers[i].buffer,
                 0,
                 vk::WHOLE_SIZE,
@@ -401,7 +431,7 @@ impl VulkanImgui {
             
             let write_image = vk::WriteDescriptorSet {
                 dst_set: imgui_descriptor_sets[i].set,
-                dst_binding: 1,
+                dst_binding: 0,
                 dst_array_element: 0,
                 descriptor_count: 1,
                 descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
@@ -424,6 +454,8 @@ impl VulkanImgui {
             staging_buffer: staging_buffer,
             vertex_buffer: vertex_buffer,
             index_buffer: index_buffer,
+            vertex_vec: vertex_vec,
+            index_vec: index_vec,
             font_image: font_image,
             font_image_view: font_image_view,
             sampler: imgui_sampler,
@@ -436,7 +468,7 @@ impl VulkanImgui {
 
     pub fn render_frame(
         &mut self,
-        image_index: u32,
+        frame_index: u32,
         cmd_secondary_imgui: &VulkanCommandBuffer,
         render_pass: vk::RenderPass,
         framebuffer: vk::Framebuffer,
@@ -446,6 +478,10 @@ impl VulkanImgui {
         // Подготовка uniform данных для ImGui
         let io = self.context.io_mut();
         window.update_imgui_io(io);
+
+        let w;
+        let h;
+
         let fb_scale = io.display_framebuffer_scale;
         let scale = [
             2.0 / (io.display_size[0] * fb_scale[0]),
@@ -454,30 +490,35 @@ impl VulkanImgui {
         let translate = [-1.0, -1.0];
         let uniform_data = ImGUIUniform { scale, translate };
 
-        let w2 = (io.display_size[0] * io.display_framebuffer_scale[0]) as u32;
-        let h2 = (io.display_size[1] * io.display_framebuffer_scale[1]) as u32;
-
-        // Начало нового фрейма ImGui
-        let ui = self.context.frame();
-        
-        // Демо-окно ImGui
-        ui.show_demo_window(&mut true);
-        
-        // Пользовательское окно
-        ui.window("Debug").build(|| {
-            ui.text("Sphere Controls");
-            ui.text_colored([1.0, 0.0, 0.0, 1.0], "Debug");
-        });
-        
-        // Рендеринг ImGui
-        let draw_data = self.context.render();
-        
         unsafe {
             // Обновление uniform буфера для ImGui
-            self.uniform_buffers[image_index as usize].mem_copy(
+            self.uniform_buffers[frame_index as usize].mem_copy(
                 &[uniform_data], None, None, None
             )?;
+        }
+        
+        w = (io.display_size[0] * io.display_framebuffer_scale[0]) as u32;
+        h = (io.display_size[1] * io.display_framebuffer_scale[1]) as u32;
+
+        let draw_data; 
+        {
+            // Начало нового фрейма ImGui
+            let ui = self.context.frame();
             
+            // Демо-окно ImGui
+            ui.show_demo_window(&mut true);
+            
+            // Пользовательское окно
+            ui.window("Test").build(|| {
+                ui.text("Sphere Controls");
+                ui.button("OK");
+                // ui.text_colored([1.0, 0.0, 0.0, 1.0], "Debug");
+            });
+            // Рендеринг ImGui
+            draw_data = self.context.render();
+        }
+        
+        unsafe {
             // Перезапись secondary командного буфера для ImGui
             cmd_secondary_imgui.reset(None)?;
             
@@ -508,8 +549,8 @@ impl VulkanImgui {
                     vk::Viewport {
                         x: 0.0,
                         y: 0.0,
-                        width: w2 as f32,
-                        height: h2 as f32,
+                        width: w as f32,
+                        height: h as f32,
                         min_depth: 0.0,
                         max_depth: 1.0,
                     }
@@ -522,7 +563,7 @@ impl VulkanImgui {
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout.layout,
                 0,
-                &[self.descriptor_sets[image_index as usize].set],
+                &[self.descriptor_sets[frame_index as usize].set],
                 &[]
             );
             
@@ -530,43 +571,72 @@ impl VulkanImgui {
             cmd_secondary_imgui._device.cmd_bind_vertex_buffers(
                 cmd_secondary_imgui._buffer,
                 0,
-                &[self.vertex_buffer.buffer],
+                &[self.vertex_vec[frame_index as usize].buffer],
                 &[0]
             );
+
+
+            let index_type = if std::mem::size_of::<imgui::DrawIdx>() == 2 {
+                vk::IndexType::UINT16
+            } else {
+                vk::IndexType::UINT32
+            };
             
             cmd_secondary_imgui._device.cmd_bind_index_buffer(
                 cmd_secondary_imgui._buffer,
-                self.index_buffer.buffer,
+                self.index_vec[frame_index as usize].buffer,
                 0,
-                vk::IndexType::UINT16
+                index_type
             );
-            
             let mut vertex_offset = 0;
             let mut index_offset = 0;
-            
             // Рендеринг каждого draw list из ImGui
             for draw_list in draw_data.draw_lists() {
+
                 let vertices = draw_list.vtx_buffer();
                 let indices = draw_list.idx_buffer();
                 
+                // let mut vertex_offset = 0;
+                // let mut index_offset = 0;
                 // Копирование вершин и индексов в буферы
-                self.vertex_buffer.mem_copy(vertices, None, None, None)?;
-                self.index_buffer.mem_copy(indices, None, None, None)?;
+                // Копирование вершин и индексов в буферы
+                self.vertex_vec[frame_index as usize].mem_copy(vertices, Some((vertex_offset * size_of::<ImGUIVertex>()) as u64), None, None)?;
+                self.index_vec[frame_index as usize].mem_copy(indices, Some((index_offset * size_of::<imgui::DrawIdx>())as u64), None, None)?;
                 
                 // Обработка команд рисования
                 for cmd in draw_list.commands() {
                     match cmd {
                         imgui::DrawCmd::Elements { count, cmd_params } => {
                             // Установка scissor области
+
                             let clip_rect = cmd_params.clip_rect;
+                            let clip_offset = draw_data.display_pos;
+                            let clip_scale = draw_data.framebuffer_scale;
+
+                            let mut clip_x = ((clip_rect[0] - clip_offset[0]) * clip_scale[0]).floor();
+                            let mut clip_y = ((clip_rect[1] - clip_offset[1]) * clip_scale[1]).floor();
+
+                            let mut clip_w = ((clip_rect[2] - clip_rect[0]) * clip_scale[0]).ceil();
+                            let mut clip_h = ((clip_rect[3] - clip_rect[1]) * clip_scale[1]).ceil();
+
+                            if clip_x < 0.0 { clip_w += clip_x; clip_x = 0.0; }
+                            if clip_y < 0.0 { clip_h += clip_y; clip_y = 0.0; }
+
+                            
+                            clip_x = clip_x.max(0.0).min(w as f32);
+                            clip_y = clip_y.max(0.0).min(h as f32);
+                            clip_w = clip_w.max(0.0).min((w as f32) - clip_x);
+                            clip_h = clip_h.max(0.0).min((h as f32) - clip_y);
+
+
                             let scissors = vk::Rect2D {
                                 offset: vk::Offset2D {
-                                    x: (clip_rect[0].max(0.0) * fb_scale[0]) as i32,
-                                    y: (clip_rect[1].max(0.0) * fb_scale[1]) as i32,
+                                    x: clip_x as i32,
+                                    y: clip_y as i32
                                 },
                                 extent: vk::Extent2D {
-                                    width: ((clip_rect[2] - clip_rect[0]) * fb_scale[0]).max(0.0) as u32,
-                                    height: ((clip_rect[3] - clip_rect[1]) * fb_scale[1]).max(0.0) as u32,
+                                    width: clip_w.max(1.0) as u32,
+                                    height: clip_h.max(1.0) as u32
                                 }
                             };
                             
@@ -589,10 +659,9 @@ impl VulkanImgui {
                         imgui::DrawCmd::RawCallback { callback, raw_cmd } => {
                             callback(draw_list.raw(), raw_cmd);
                         },
-                        _ => {}
+                        imgui::DrawCmd::ResetRenderState => {}
                     }
                 }
-                
                 vertex_offset += vertices.len();
                 index_offset += indices.len();
             }
@@ -603,4 +672,3 @@ impl VulkanImgui {
         Ok(())
     }
 }
-

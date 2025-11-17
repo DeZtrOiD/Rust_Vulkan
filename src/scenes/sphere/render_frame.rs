@@ -21,8 +21,11 @@ pub fn render_frame_app(app: & mut VulkanApp, resources: &mut FrameResources) ->
     let sem_offset = (current_frame * 2) as usize;
     let image_available = &resources.vec_sem[sem_offset];
     
-    let (image_index, _) = app.swapchain.acquire_next_image(Some(image_available.semaphore), None)?;
+    let (image_index, flg) = app.swapchain.acquire_next_image(Some(image_available.semaphore), None)?;
 
+    if (flg) {
+        print!("SUBOPTIMAL");
+    }
     // let fence_2 = resources.vec_fence[app.swapchain.images.len() + image_index as usize].fence;
     // unsafe {
     //     app.core._logical_device.wait_for_fences(&[fence_2], true, u64::MAX).unwrap();

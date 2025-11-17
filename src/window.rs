@@ -61,7 +61,7 @@ pub struct Window {
 }
 
 fn callback_window(time: f64, event: WindowEvent, window: &mut PWindow) -> () {
-    println!("{:?}", event);
+    // println!("{:?}", event);
     match event {
         glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
             window.set_should_close(true);
@@ -146,8 +146,6 @@ impl Window {
         io.mouse_pos = [mx as f32, my as f32];
         io.mouse_down[0] = self._window.get_mouse_button( glfw::MouseButtonLeft ) == glfw::Action::Press;
         io.mouse_down[1] = self._window.get_mouse_button( glfw::MouseButtonRight ) == glfw::Action::Press;
-
-        // Колесико тут не обрабатывается
 
         for i in 0..KEY_CODES.len() {
             io.keys_down[i] = self._window.get_key( KEY_CODES[i] ) == glfw::Action::Press;

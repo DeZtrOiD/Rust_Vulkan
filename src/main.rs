@@ -9,7 +9,7 @@ mod vulkan_wr;
 mod scenes;
 
 use vulkan_wr::app::{VulkanApp};
-// use vulkan_wr::render_func::{init_app, update_app, shutdown_app, render_frame_app};
+
 use scenes::sphere::{
     frame_resources::get_frame_resources,
     init::init_app,
@@ -19,27 +19,18 @@ use scenes::sphere::{
 };
 
 
+// Я исправил часть проблем и теперь все почти полностью работает. Осталась пара проблем.
+// 1. При быстром перемещении окна, его края с той стороны в которую перемещается окно с текстом закрашиваются задним фоном, причем оглавление окна не закрашивается, а элементы внутри - да.
+// 2. При перемещении по главному меню демо окна, оба окна начинают мерцать
+
+
 fn main() {
     let app_name = "RUST_POBEDA";
     let height = 720;
-    let width = 720;
-
+    let width = 1280;
     let window_ = window::Window::try_new(width, height, app_name, glfw::WindowMode::Windowed)
         .unwrap();
     let mut app = VulkanApp::try_new(window_, app_name).unwrap();
-        //     cmd_count_primary: u32,
-        //     cmd_count_secondary: u32,
-        //     sem_count: u32,
-        //     fence_count: u32,
-        //     func: fn(
-        //         app: &VulkanApp,
-        //         image_count: u32
-        //     ) -> AppVkResult<R>
-        //             image_count,
-        // 0,
-        // image_count * 2, // 2 семафора на изображение
-        // image_count,
-        // get_frame_resources
 
     let image_count = app.get_swapchain_images_count();
     let mut frame_res = app.get_frame_resources(
