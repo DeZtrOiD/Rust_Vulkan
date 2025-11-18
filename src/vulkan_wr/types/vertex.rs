@@ -13,6 +13,8 @@ use std::mem::{offset_of, size_of};
 pub struct Vertex {
     pub pos: [f32; 3],
     pub color: [f32; 3],
+    pub norm: [f32; 3],
+    pub uv: [f32; 2],
 }
 
 impl Vertex {
@@ -24,7 +26,7 @@ impl Vertex {
         }
     }
 
-    pub fn get_attribute_descriptions() -> [vk::VertexInputAttributeDescription; 2] {
+    pub fn get_attribute_descriptions() -> [vk::VertexInputAttributeDescription; 4] {
         [
             vk::VertexInputAttributeDescription {
                 location: 0,
@@ -38,6 +40,27 @@ impl Vertex {
                 format: vk::Format::R32G32B32_SFLOAT,
                 offset: offset_of!(Vertex, color) as u32,
             },
+            vk::VertexInputAttributeDescription {
+                location: 2,
+                binding: 0,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: offset_of!(Vertex, norm) as u32,
+            },
+            vk::VertexInputAttributeDescription {
+                location: 3,
+                binding: 0,
+                format: vk::Format::R32G32_SFLOAT,
+                offset: offset_of!(Vertex, uv) as u32,
+            }
         ]
+    }
+}
+
+impl Default for Vertex {
+    fn default() -> Self {
+        Self { pos: ([0.0, 0.0, 0.0]),
+            color: ([0.0, 0.0, 0.0]),
+            norm: ([0.0, 0.0, 0.0]),
+            uv: ([0.0, 0.0]) }
     }
 }

@@ -67,7 +67,7 @@ impl<'a> InitObject<InitFrameResources<'a>> for SphereObject {
             // немного синей составляющей от высоты, чтобы грани внутри различались
             let b = 1.0 - (theta / std::f32::consts::PI);
 
-            vertices.push(Vertex { pos: [x, y, z], color: [r, g, b] });
+            vertices.push(Vertex { pos: [x, y, z], color: [r, g, b], ..Default::default()});
         }
     }
 
