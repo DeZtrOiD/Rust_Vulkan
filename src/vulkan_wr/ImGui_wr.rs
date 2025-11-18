@@ -4,11 +4,13 @@
 // Desc:
 // #=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#
 
-use ash::vk;
+use ash::vk::{self, CompareOp};
 use std::mem::offset_of;
 use crate::vulkan_wr::descriptor::descriptor_set;
 use crate::vulkan_wr::sampler;
 use imgui::internal::RawWrapper;
+
+use super::types::matrix::Matrix;
 
 use super::app::{VulkanApp, SceneResources};
 use super::{
@@ -24,7 +26,12 @@ use super::{
         fence::VulkanFence,
     },
     sampler::{VulkanSampler, VulkanSamplerBuilder},
-    shader::VulkanShader
+    shader::VulkanShader,
+    renderable_traits::{
+        InitObject, InitObjectResources,
+        RenderObject, RenderObjectResources,
+        UpdateObject, UpdateObjectResources,
+        ShutdownObject, ShutdownObjectResources, InitFrameResources, RenderFrameResources},
 };
 
 use super::super::window::Window;
@@ -78,29 +85,41 @@ impl ImGUIVertex {
     }
 }
 
-pub struct VulkanImgui {
+pub trait ImguiResources {
+    fn render_ui(&mut self, ui: &mut imgui::Ui);
+}
+
+pub struct VulkanImgui<R: ImguiResources + Default> {
     pub context: imgui::Context,
     pub pipeline: VulkanPipeline,
     pub pipeline_layout: VulkanPipelineLayout,
     pub descriptor_set_layout: Vec<VulkanDescriptorSetLayout>,
     pub uniform_buffers: Vec<VulkanBuffer>,
     pub staging_buffer: VulkanBuffer,
-    pub vertex_buffer: VulkanBuffer,
-    pub index_buffer: VulkanBuffer,
     pub vertex_vec: Vec<VulkanBuffer>,
     pub index_vec: Vec<VulkanBuffer>,
     pub font_image: VulkanImage,
     pub font_image_view: VulkanImageView,
     pub sampler: VulkanSampler,
     pub descriptor_sets: Vec<VulkanDescriptorSet>,
+    pub cmd_vec: Vec<VulkanCommandBuffer>,
 
     // по идее это одноразовые штуки
-    pub copy_region: vk::BufferImageCopy,
-    pub barriers: (vk::ImageMemoryBarrier<'static>, vk::ImageMemoryBarrier<'static>),
+    // pub copy_region: vk::BufferImageCopy,
+    // pub barriers: (vk::ImageMemoryBarrier<'static>, vk::ImageMemoryBarrier<'static>),
+
+    pub resources: R,
 }
 
-impl VulkanImgui {
-    pub fn try_new(app: &VulkanApp, render_pass: &VulkanRenderPass) -> Result<Self, &'static str> {
+// pub struct InitImguiResources<'a> {
+//     pub render_pass: &'a VulkanRenderPass,
+//     pub upload_cmd: &'a VulkanCommandBuffer,
+//     pub fence: &'a VulkanFence,
+// }
+
+impl <'a, R: ImguiResources + Default> InitObject<InitFrameResources<'a>> for VulkanImgui<R>{
+    type OutObject = VulkanImgui<R>;
+    fn init(app: & mut VulkanApp, resources: &mut InitFrameResources<'a>) -> Result<VulkanImgui<R>, &'static str> {
         let mut imgui = imgui::Context::create();
         imgui.set_ini_filename(None);
         imgui.set_log_filename(None);
@@ -138,9 +157,6 @@ impl VulkanImgui {
             image_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
             image_extent: font_extent,
         };
-
-        // resources.imgui = Some(imgui);
-        // resources.atlas = Some(atlas);
 
         // 11. Создание пайплайна для ImGui
         // 11.1. Загрузка шейдеров ImGui
@@ -222,7 +238,8 @@ impl VulkanImgui {
             dst_alpha_blend_factor: vk::BlendFactor::ZERO,
             alpha_blend_op: vk::BlendOp::ADD,
             color_write_mask: vk::ColorComponentFlags::RGBA,
-        };
+            
+        }; 
 
         let imgui_color_blend = vk::PipelineColorBlendStateCreateInfo {
             logic_op_enable: 0,
@@ -275,7 +292,7 @@ impl VulkanImgui {
         // 11.11. Создание пайплайна
         let imgui_pipeline = VulkanPipelineBuilder::new(
             &app.core._logical_device,
-            render_pass.render_pass,
+            resources.render_pass.as_ref().ok_or("RENDERPASS Imgui is not initialized")?.render_pass,
             imgui_pipeline_layout.layout
         )
         .with_shader_stages(imgui_shader_stages)
@@ -310,33 +327,6 @@ impl VulkanImgui {
         // Создание sampler для текстуры шрифта
         let imgui_sampler = VulkanSamplerBuilder::new(&app.core._logical_device).build()?;
 
-        // он нужен до записи атласа
-        let barrier1 = vk::ImageMemoryBarrier {
-            old_layout: vk::ImageLayout::UNDEFINED,
-            new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            image: font_image.image,
-            subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                level_count: 1,
-                layer_count: 1,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        // он нужен после текстурного атласа
-        let barrier2 = vk::ImageMemoryBarrier {
-            old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            image: font_image.image,
-            subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                level_count: 1,
-                layer_count: 1,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
 
         // 13. Uniform буферы для ImGui (для масштабирования/смещения)
 
@@ -345,7 +335,7 @@ impl VulkanImgui {
 
         let mut imgui_uniform_buffers = vec![];
         // Создание uniform буферов для каждого кадра
-        for _ in 0..app.swapchain.images.len() {
+        for _ in 0..app.image_count {
             let buf = VulkanBuffer::try_new(
                 &app.core,
                 std::mem::size_of::<ImGUIUniform>() as vk::DeviceSize,
@@ -356,20 +346,13 @@ impl VulkanImgui {
             imgui_uniform_buffers.push(buf);
         }
 
+
         // 14. Буферы вершин и индексов для ImGui
         let vertex_buffer_size = (MAX_VERTICES * std::mem::size_of::<ImGUIVertex>()) as u64;
         let index_buffer_size = (MAX_INDICES * std::mem::size_of::<imgui::DrawIdx>()) as u64;
 
-        let vertex_buffer = VulkanBuffer::try_new(
-            &app.core,
-            vertex_buffer_size,
-            vk::BufferUsageFlags::VERTEX_BUFFER,
-            vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
-            None, None, None, None
-        )?;
-
         let mut vertex_vec = vec![];
-        for _ in 0..app.swapchain.images.len() {
+        for _ in 0..app.image_count {
             let buf = VulkanBuffer::try_new(
                 &app.core,
                 vertex_buffer_size,
@@ -380,16 +363,8 @@ impl VulkanImgui {
             vertex_vec.push(buf);
         }
 
-        let index_buffer = VulkanBuffer::try_new(
-            &app.core,
-            index_buffer_size,
-            vk::BufferUsageFlags::INDEX_BUFFER,
-            vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
-            None, None, None, None
-        )?;
-
         let mut index_vec = vec![];
-        for _ in 0..app.swapchain.images.len() {
+        for _ in 0..app.image_count {
             let buf = VulkanBuffer::try_new(
                 &app.core,
                 index_buffer_size,
@@ -402,7 +377,7 @@ impl VulkanImgui {
 
         let mut imgui_descriptor_sets = vec![];
         // 15. Создание descriptor sets для ImGui
-        for i in 0..app.swapchain.images.len() {
+        for _ in 0..app.image_count {
             let descriptor_set = app.descriptor_pool.allocate_descriptor_sets(
                 imgui_descriptor_set_layout.as_slice()
             )?[0].clone();
@@ -411,7 +386,7 @@ impl VulkanImgui {
         }
 
         // Обновление descriptor sets для ImGui
-        for i in 0..imgui_descriptor_sets.len() {
+        for i in 0..app.image_count as usize {
             // Обновление uniform буфера
             let (mut write_uniform, buf_info) = imgui_descriptor_sets[i].write_buffer(
                 1,
@@ -445,6 +420,92 @@ impl VulkanImgui {
             );
         }
 
+
+        // он нужен до записи атласа
+        let barrier1 = vk::ImageMemoryBarrier {
+            old_layout: vk::ImageLayout::UNDEFINED,
+            new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            image: font_image.image,
+            subresource_range: vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                level_count: 1,
+                layer_count: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        // он нужен после текстурного атласа
+        let barrier2 = vk::ImageMemoryBarrier {
+            old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            image: font_image.image,
+            subresource_range: vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                level_count: 1,
+                layer_count: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let upload_cmd = resources.upload_cmd.as_ref().ok_or("CMD Imgui is not initialized")?;
+        upload_cmd.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT, None)?;
+        // Копирование из staging buffer в атлас. это должно быть один раз
+        unsafe {
+            upload_cmd._device.cmd_pipeline_barrier(
+                upload_cmd._buffer,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier1]
+            );
+
+            // копирование шрифтов 
+            upload_cmd._device.cmd_copy_buffer_to_image(
+                upload_cmd._buffer,
+                staging_buffer.buffer,
+                font_image.image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &[copy_region]
+            );
+
+            upload_cmd._device.cmd_pipeline_barrier(
+                upload_cmd._buffer,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier2]
+            );
+        }
+        upload_cmd.end()?;
+
+        let fence = resources.fence.as_ref().ok_or("FENCE Imgui is not initialized")?;
+
+        let submit_info = vk::SubmitInfo {
+            // wait_semaphore_count: 1,
+            // p_wait_semaphores: &image_available.semaphore,
+            // p_wait_dst_stage_mask: wait_stages.as_ptr(),
+            command_buffer_count: 1,
+            p_command_buffers: &upload_cmd._buffer,
+            // signal_semaphore_count: 1,
+            // p_signal_semaphores: &render_finished.semaphore,
+            ..Default::default()
+        };
+        unsafe {
+            app.core._logical_device.reset_fences(&[fence.fence]).map_err(|_| "Err upload_cmd::reset_fences")?;
+        }
+        app.core.queue_submit(&[submit_info], fence.fence)?;
+        unsafe {
+            app.core._logical_device.wait_for_fences(&[fence.fence], true, u64::MAX).map_err(|_| "Err upload_cmd::wait_for_fences")?;
+        }
+
+        let vec_cmd_secondary_imgui = app.command_pool.allocate_command_buffers(app.image_count, vk::CommandBufferLevel::SECONDARY)?;
+
         Ok(Self {
             context: imgui,
             pipeline: imgui_pipeline,
@@ -452,32 +513,36 @@ impl VulkanImgui {
             descriptor_set_layout: imgui_descriptor_set_layout,
             uniform_buffers: imgui_uniform_buffers,
             staging_buffer: staging_buffer,
-            vertex_buffer: vertex_buffer,
-            index_buffer: index_buffer,
             vertex_vec: vertex_vec,
             index_vec: index_vec,
             font_image: font_image,
             font_image_view: font_image_view,
             sampler: imgui_sampler,
             descriptor_sets: imgui_descriptor_sets,
-            copy_region: copy_region,
-            barriers: (barrier1, barrier2),
+            resources: R::default(),
+            cmd_vec: vec_cmd_secondary_imgui,
         })
+
     }
+}
 
 
-    pub fn render_frame(
-        &mut self,
-        frame_index: u32,
-        cmd_secondary_imgui: &VulkanCommandBuffer,
-        render_pass: vk::RenderPass,
-        framebuffer: vk::Framebuffer,
-        window: &mut Window,
-    ) -> Result<(), &'static str> {
+// pub struct RenderImguiResources<'a> {
+//         pub render_pass: &'a VulkanRenderPass,
+//         pub framebuffer: &'a VulkanFramebuffer,
+//         // pub window: &'a Window,
+// }
+// .as_ref().ok_or("Err obj is not initialized")?
 
+impl <'a, R: ImguiResources + Default> RenderObject<RenderFrameResources<'a>> for VulkanImgui<R>{
+    fn render(
+            &mut self, app: & mut VulkanApp,
+            resources: &RenderFrameResources<'a>
+        ) -> Result<(), &'static str> {
         // Подготовка uniform данных для ImGui
         let io = self.context.io_mut();
-        window.update_imgui_io(io);
+        app.window.update_imgui_io(io);
+        let frame_index = app.frame_index as usize;
 
         let w;
         let h;
@@ -492,7 +557,7 @@ impl VulkanImgui {
 
         unsafe {
             // Обновление uniform буфера для ImGui
-            self.uniform_buffers[frame_index as usize].mem_copy(
+            self.uniform_buffers[frame_index].mem_copy(
                 &[uniform_data], None, None, None
             )?;
         }
@@ -504,51 +569,42 @@ impl VulkanImgui {
         {
             // Начало нового фрейма ImGui
             let ui = self.context.frame();
-            
-            // Демо-окно ImGui
-            // ui.show_demo_window(&mut true);
-            
-            // Пользовательское окно
-            ui.window("Test").build(|| {
-                ui.text("Sphere Controls");
-                ui.button("OK");
-            });
+
+            self.resources.render_ui(ui);
+
             // Рендеринг ImGui
             draw_data = self.context.render();
         }
 
-        if draw_data.draw_lists_count() == 0 {
-            cmd_secondary_imgui.end()?;
-            return Ok(());
-        }
-
-
         unsafe {
+            let cmd_buf = &self.cmd_vec[app.frame_index as usize];
             // Перезапись secondary командного буфера для ImGui
-            cmd_secondary_imgui.reset(None)?;
+            cmd_buf.reset(None)?;
             
             let inheritance_info = vk::CommandBufferInheritanceInfo {
-                render_pass: render_pass,
+                render_pass: resources.render_pass.as_ref().ok_or("Err imgui is not initialized")?.render_pass,
                 subpass: 0,
-                framebuffer: framebuffer,
+                framebuffer: resources.framebuffer.as_ref().ok_or("Err imgui is not initialized")?.framebuffer,
                 ..Default::default()
             };
             
-            cmd_secondary_imgui.begin(
+            cmd_buf.begin(
                 vk::CommandBufferUsageFlags::RENDER_PASS_CONTINUE,
                 Some(&inheritance_info)
             )?;
+
+            if draw_data.draw_lists_count() == 0 {
+                cmd_buf.end()?;
+                return Ok(());
+            }
             
             // Привязка пайплайна ImGui
-            cmd_secondary_imgui._device.cmd_bind_pipeline(
-                cmd_secondary_imgui._buffer,
+            cmd_buf.bind_pipeline(
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline.pipeline
             );
 
-            
-            cmd_secondary_imgui._device.cmd_set_viewport(
-                cmd_secondary_imgui._buffer,
+            cmd_buf.set_viewport(
                 0,
                 &[
                     vk::Viewport {
@@ -563,20 +619,18 @@ impl VulkanImgui {
             );
             
             // Привязка дескрипторных наборов ImGui
-            cmd_secondary_imgui._device.cmd_bind_descriptor_sets(
-                cmd_secondary_imgui._buffer,
+            cmd_buf.bind_descriptor_sets(
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout.layout,
                 0,
-                &[self.descriptor_sets[frame_index as usize].set],
+                &[self.descriptor_sets[frame_index].set],
                 &[]
             );
             
             // Привязка буферов вершин и индексов ImGui
-            cmd_secondary_imgui._device.cmd_bind_vertex_buffers(
-                cmd_secondary_imgui._buffer,
+            cmd_buf.bind_vertex_buffers(
                 0,
-                &[self.vertex_vec[frame_index as usize].buffer],
+                &[self.vertex_vec[frame_index].buffer],
                 &[0]
             );
 
@@ -587,13 +641,11 @@ impl VulkanImgui {
                 vk::IndexType::UINT32
             };
             
-            cmd_secondary_imgui._device.cmd_bind_index_buffer(
-                cmd_secondary_imgui._buffer,
-                self.index_vec[frame_index as usize].buffer,
+            cmd_buf.bind_index_buffer(
+                self.index_vec[frame_index].buffer,
                 0,
                 index_type
             );
-
 
             let mut vertex_offset = 0;
             let mut index_offset = 0;
@@ -603,12 +655,14 @@ impl VulkanImgui {
                 let vertices = draw_list.vtx_buffer();
                 let indices = draw_list.idx_buffer();
                 
-                // let mut vertex_offset = 0;
-                // let mut index_offset = 0;
                 // Копирование вершин и индексов в буферы
                 // Копирование вершин и индексов в буферы
-                self.vertex_vec[frame_index as usize].mem_copy(vertices, Some((vertex_offset * size_of::<ImGUIVertex>()) as u64), None, None)?;
-                self.index_vec[frame_index as usize].mem_copy(indices, Some((index_offset * size_of::<imgui::DrawIdx>())as u64), None, None)?;
+                self.vertex_vec[frame_index].mem_copy(
+                    vertices, Some((vertex_offset * size_of::<ImGUIVertex>()) as u64), None, None
+                )?;
+                self.index_vec[frame_index].mem_copy(
+                    indices, Some((index_offset * size_of::<imgui::DrawIdx>())as u64), None, None
+                )?;
                 
                 // Обработка команд рисования
                 for cmd in draw_list.commands() {
@@ -647,15 +701,13 @@ impl VulkanImgui {
                                 }
                             };
                             
-                            cmd_secondary_imgui._device.cmd_set_scissor(
-                                cmd_secondary_imgui._buffer,
+                            cmd_buf.set_scissor(
                                 0,
                                 &[scissors]
                             );
                             
                             // Отрисовка элементов
-                            cmd_secondary_imgui._device.cmd_draw_indexed(
-                                cmd_secondary_imgui._buffer,
+                            cmd_buf.draw_indexed(
                                 count as u32,
                                 1,
                                 (index_offset + cmd_params.idx_offset) as u32,
@@ -673,9 +725,29 @@ impl VulkanImgui {
                 index_offset += indices.len();
             }
             
-            cmd_secondary_imgui.end()?;
+            cmd_buf.end()?;
         }
 
+        Ok(())
+
+    }
+}
+
+pub struct ShutdownImguiResources {}
+impl ShutdownObjectResources for ShutdownImguiResources {}
+impl<R: ImguiResources + Default> ShutdownObject<ShutdownImguiResources> for VulkanImgui<R> {
+    fn shutdown(app: & mut VulkanApp, resources: &mut ShutdownImguiResources) -> Result<(), &'static str> {
+        Ok(())
+    }
+}
+
+pub trait UpdateImguiResources<R: ImguiResources + Default> {
+    fn update_imgui(&mut self, imgui: & mut VulkanImgui<R>, app: & mut VulkanApp) -> Result<(), &'static str>;
+}
+
+impl<R: ImguiResources + Default, Resources: UpdateImguiResources<R> + UpdateObjectResources> UpdateObject<Resources> for VulkanImgui<R> {
+    fn update(&mut self, app: & mut VulkanApp, resources: &mut Resources) -> Result<(), &'static str> {
+        resources.update_imgui(self, app)?;
         Ok(())
     }
 }

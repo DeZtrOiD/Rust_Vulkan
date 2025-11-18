@@ -5,7 +5,7 @@
 // #=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#
 
 
-use ash::{vk, khr, Device};
+use ash::{Device, khr, vk::{self, SwapchainKHR}};
 use super::core::VulkanCore;
 
 pub struct VulkanSwapchain {
@@ -23,18 +23,38 @@ pub struct VulkanSwapchain {
 impl VulkanSwapchain {
     pub fn acquire_next_image(&self, sem: Option<vk::Semaphore>, fence: Option<vk::Fence>) -> Result<(u32, bool), &'static str> {
         unsafe {
-            self.ext_device.acquire_next_image(
+            match self.ext_device.acquire_next_image(
                 self.swapchain,
                 u64::MAX,
                 sem.unwrap_or(vk::Semaphore::null()),
                 fence.unwrap_or(vk::Fence::null())
-            ).map_err(|_| "Err acquire_next_image")
+            ) {
+                    Ok((index, flag)) => {
+                        return Ok((index, flag));
+                    },
+                    Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                        return Ok((0, true));  // 0 ничего не значит, с true свапчейн всегда считается протухших и удаляется
+                    },
+                    Err(e) => {
+                        return Err("Failed to acquire_next_image");
+                    }
+            }
         }
     }
-
+    // почему то эти функции не возращают suboptimal а дают сразу ERROR_OUT_OF_DATE_KHR
     pub fn queue_present(&self, queue: vk::Queue, present_info: &vk::PresentInfoKHR) -> Result<bool, &'static str> {
         unsafe {
-            self.ext_device.queue_present(queue, present_info).map_err(|_| "Err queue_present")
+            match self.ext_device.queue_present(queue, present_info) {
+                Ok(flag) => {
+                    return Ok(flag);
+                },
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                    return Ok(false);
+                },
+                Err(e) => {
+                    return Err("Failed to present swapchain image");
+                }
+            }
         }
     }
 }
@@ -56,6 +76,7 @@ pub struct VulkanSwapchainBuilder<'a> {
     extent: Option<vk::Extent2D>,
     min_image_count: Option<u32>,
     image_array_layers: u32,
+    old_swapchain: vk::SwapchainKHR,
 }
 
 impl<'a> VulkanSwapchainBuilder<'a> {
@@ -69,11 +90,17 @@ impl<'a> VulkanSwapchainBuilder<'a> {
             extent: None,
             min_image_count: None,
             image_array_layers: 1,
+            old_swapchain: SwapchainKHR::null(),
         }
     }
 
     pub fn image_usage(mut self, usage: vk::ImageUsageFlags) -> Self {
         self.image_usage = usage;
+        self
+    }
+
+    pub fn old_swapchain(mut self, old_swapchain: vk::SwapchainKHR) -> Self {
+        self.old_swapchain = old_swapchain;
         self
     }
 
@@ -171,7 +198,7 @@ impl<'a> VulkanSwapchainBuilder<'a> {
         });
 
         // --- EXTENT ---
-        let extent = self.extent.unwrap_or(caps.current_extent);
+        let extent = self.extent.unwrap_or(caps.current_extent);  // current_extent
 
         // --- IMAGE COUNT ---
         let image_count = self
@@ -200,6 +227,7 @@ impl<'a> VulkanSwapchainBuilder<'a> {
             composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,  // смешивание альф
             present_mode: present_mode,  // FIFO/MAILBOX
             clipped: vk::TRUE,  // пиксели вне окна отбрасываются
+            old_swapchain: self.old_swapchain,
             ..Default::default()
         };
 

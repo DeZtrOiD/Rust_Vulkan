@@ -88,7 +88,7 @@ impl<'a> VulkanPipelineBuilder<'a> {
             rasterizer_discard_enable: vk::FALSE,  // TRUE отключает растеризацию и все что после. Нужно для каких-то особых вычислений 
             polygon_mode: vk::PolygonMode::FILL,
             line_width: 1.0,
-            cull_mode:vk::CullModeFlags::BACK, // vk::CullModeFlags::BACK,
+            cull_mode:vk::CullModeFlags::NONE, // vk::CullModeFlags::BACK,
             front_face: vk::FrontFace::COUNTER_CLOCKWISE,
             depth_bias_enable: vk::FALSE,  // для борьбы с z-fighting
             ..Default::default()

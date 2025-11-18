@@ -53,6 +53,7 @@ impl<T: Default + Copy, const ROWS: usize, const COLS: usize> Matrix<T, ROWS, CO
     }
 }
 
+
 impl<T: Default + Copy + From<f32>, const SIZE: usize> Matrix<T, SIZE, SIZE> {
     pub fn identity() -> Self {
         let mut data = [[T::default(); SIZE]; SIZE];
@@ -158,3 +159,50 @@ impl<T: fmt::Display, const ROWS: usize, const COLS: usize> fmt::Display
         Ok(())
     }
 }
+
+
+impl Matrix<f32,4 , 4> {
+    pub fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) -> Self {
+    Matrix::new([
+        [ 2.0/(right-left), 0.0,                0.0,               0.0 ],
+        [ 0.0,              2.0/(top-bottom),   0.0,               0.0 ],
+        [ 0.0,              0.0,                1.0/(near-far),    0.0 ],
+        [ -(right+left)/(right-left), -(top+bottom)/(top-bottom), near/(near-far), 1.0 ],
+    ])
+
+
+    }
+
+    pub fn scale(sx: f32, sy: f32, sz: f32) -> Self {
+        let mut data = [[0.0; 4]; 4];
+        data[0][0] = sx;
+        data[1][1] = sy;
+        data[2][2] = sz;
+        data[3][3] = 1.0;
+        Self { data }
+    }
+
+    pub fn perspective(fov: f32, aspect: f32, near: f32, far: f32) -> Self {
+        let f = 1.0 / (fov / 2.0).tan();
+        let nf = 1.0 / (near - far);
+
+        Matrix::new([
+            [ f/aspect, 0.0,  0.0,              0.0 ],
+            [ 0.0,      f,    0.0,              0.0 ],
+            [ 0.0,      0.0,  (far)*nf + near*nf, (2.0*far*near)*nf ],
+            [ 0.0,      0.0, -1.0,              0.0 ],
+        ])
+    }
+
+    pub fn translate(x: f32, y: f32, z: f32) -> Self {
+        Matrix::new([
+            [1.0, 0.0, 0.0, x],
+            [0.0, 1.0, 0.0, y],
+            [0.0, 0.0, 1.0, z],
+            [0.0, 0.0, 0.0, 1.0],
+        ])
+    }
+
+
+}
+

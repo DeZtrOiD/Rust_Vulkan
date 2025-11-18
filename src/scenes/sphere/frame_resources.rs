@@ -1,110 +1,60 @@
 
-use ash::vk;
 use super::super::super::vulkan_wr::{
-    app::{VulkanApp, SceneResources},
-    render_pass::pass::VulkanRenderPass,
-    descriptor::{descriptor_set_layout::VulkanDescriptorSetLayout, descriptor_set::VulkanDescriptorSet},
-    pipeline::{pipeline_layout::VulkanPipelineLayout, pipeline::VulkanPipeline},
-    buffer::buffer::VulkanBuffer,
-    framebuffer::VulkanFramebuffer,
-    image::{image_view::VulkanImageView, image::VulkanImage},
-    command_pb::command_buffer::VulkanCommandBuffer,
-    sync::{
-        semaphore::VulkanSemaphore,
-        fence::VulkanFence,
-    },
-    sampler::VulkanSampler,
-    ImGui_wr::VulkanImgui,
+    ImGui_wr::{ImguiResources},
 };
 
-pub struct FrameResources {
-    pub vec_fence: Vec<VulkanFence>,  // CPU + GPU
-    pub vec_sem: Vec<VulkanSemaphore>, // [image_available, render_finished, ...]
-    pub vec_cmd_primary: Vec<VulkanCommandBuffer>,
-    pub vec_cmd_secondary: Vec<VulkanCommandBuffer>,
-
-    pub image_view: Vec<VulkanImageView>,
-    pub framebuffers: Vec<VulkanFramebuffer>, // one per swapchain image
-
-    pub render_pass: Option<VulkanRenderPass>,
-
-    pub descriptor_sets: Vec<VulkanDescriptorSet>,
-    pub pipeline: Option<VulkanPipeline>,
-    pub descriptor_set_layout: Vec<VulkanDescriptorSetLayout>,
-    pub pipeline_layout: Vec<VulkanPipelineLayout>,
-
-    pub uniform_buffers: Vec<VulkanBuffer>, // per-image UBO (float time)
-    pub vertex_buffer: Option<VulkanBuffer>,
-    pub index_buffer: Option<VulkanBuffer>,
-    pub index_count: u32,
-
-    pub depth_images: Vec<VulkanImage>,
-    pub depth_image_views: Vec<VulkanImageView>,
-
+pub struct ImguiFrameResources {
+    pub animation_paused: bool,
+    pub animation_reverse: bool,
+    pub use_perspective: bool,
+    pub camera_rotation: [f32; 2], // [yaw, pitch]
+    pub pulse_scale: f32,
     pub start_time: std::time::Instant,
-
-    pub _imgui: Option<VulkanImgui>,
-    pub vec_cmd_secondary_imgui: Vec<VulkanCommandBuffer>,
+    pub prev_time: std::time::Instant,
+    pub aimation_time: f32,
 }
 
-impl SceneResources for FrameResources {}
+impl ImguiResources for ImguiFrameResources {
+    fn render_ui(&mut self, ui: &mut imgui::Ui) {
+        ui.window("Sphere Controls").build(|| {
+            ui.text("Animation Controls:");
+            
+            // Переключение проекции
+            ui.checkbox("Perspective Projection", &mut self.use_perspective);
+            
+            // Управление анимацией
+            ui.checkbox("Pause Animation", &mut self.animation_paused);
+            ui.checkbox("Reverse Animation", &mut self.animation_reverse);
+            
+            ui.separator();
+            ui.text("Camera Rotation:");
+            
+            // Вращение камеры
+            ui.slider("Yaw", -3.14, 3.14, &mut self.camera_rotation[0]);
+            ui.slider("Pitch", -1.57, 1.57, &mut self.camera_rotation[1]);
+            
+            ui.separator();
+            ui.text("Info:");
+            ui.text(format!("Pulse Scale: {:.2}", self.pulse_scale));
+            ui.text(format!("Time: {:.2}", (self.prev_time - self.start_time).as_secs_f32()));
+        });
 
-pub fn get_frame_resources(
-        app: &VulkanApp,
-        image_count: u32,
-    ) -> Result<FrameResources, &'static str>{
-    
-    let cmd_count_primary: u32 = image_count;
-    let cmd_count_secondary: u32 = image_count; // основной рендер + imgui
-    let cmd_count_secondary_imgui: u32 = image_count; // основной рендер + imgui
-    let sem_count: u32 = image_count * 2;  // 2 семафора на картнику 
-    let fence_count: u32 = image_count * 2; 
-
-    let mut vec_sem = vec![];
-    for _ in 0..sem_count {
-        vec_sem.push(VulkanSemaphore::try_new(&app.core._logical_device)?);
     }
-
-    let mut vec_fence = vec![];
-    for _ in 0..fence_count {
-        vec_fence.push(VulkanFence::try_new(&app.core._logical_device, vk::FenceCreateFlags::SIGNALED)?);
-    }
-
-    let mut vec_cmd_primary = vec![];
-    if cmd_count_primary != 0 {
-        vec_cmd_primary = app.command_pool.allocate_command_buffers(cmd_count_primary, vk::CommandBufferLevel::PRIMARY)?;
-    }
-    let mut vec_cmd_secondary = vec![];
-    if cmd_count_secondary != 0 {
-        let mut tmp = app.command_pool.allocate_command_buffers(cmd_count_primary, vk::CommandBufferLevel::SECONDARY)?;
-        vec_cmd_secondary.append(&mut tmp);
-    }
-    let mut vec_cmd_secondary_imgui = vec![];
-    if cmd_count_secondary_imgui != 0 {
-        let mut tmp = app.command_pool.allocate_command_buffers(cmd_count_primary, vk::CommandBufferLevel::SECONDARY)?;
-        vec_cmd_secondary_imgui.append(&mut tmp);
-    }
-    Ok(FrameResources {
-        vec_sem: vec_sem,
-        vec_cmd_primary: vec_cmd_primary,
-        vec_cmd_secondary: vec_cmd_secondary,
-        vec_fence: vec_fence,
-        image_view: vec![],
-        framebuffers: vec![], // one per swapchain image
-        render_pass: None,
-        pipeline: None,
-        pipeline_layout: vec![],
-        descriptor_set_layout: vec![],
-        descriptor_sets: vec![],
-        uniform_buffers: vec![], // per-image UBO (float time)
-        vertex_buffer: None,
-        index_buffer: None,
-        index_count: 0,
-        depth_image_views: vec![],
-        depth_images: vec![],
-        
-        _imgui: None,
-        vec_cmd_secondary_imgui: vec_cmd_secondary_imgui,
-        start_time: std::time::Instant::now(),
-    })
 }
+
+impl Default for ImguiFrameResources {
+    fn default() -> Self {
+        let time = std::time::Instant::now();
+        Self { 
+            animation_paused: false,
+            animation_reverse: false,
+            use_perspective: true,
+            camera_rotation: [0.0, 0.0],
+            pulse_scale: 1.0,
+            start_time: time,
+            prev_time: time,
+            aimation_time: 0.0,
+        }
+    }
+}
+

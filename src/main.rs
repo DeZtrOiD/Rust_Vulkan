@@ -10,14 +10,20 @@ mod scenes;
 
 use vulkan_wr::app::{VulkanApp};
 
-use scenes::sphere::{
-    frame_resources::get_frame_resources,
+use scenes::common::{
+    frame_resources::FrameResources,
     init::init_app,
-    update::update_app,
     render_frame::render_frame_app,
+    renderable_object::RenderObjectEnum,
     shutdown::shutdown_app,
+    update::update_app,
 };
 
+use scenes::sphere::{
+    frame_resources::ImguiFrameResources,
+    objects::SphereObject,
+    update::ResourcesSphere,
+};
 
 fn main() {
     let app_name = "RUST_POBEDA";
@@ -28,17 +34,27 @@ fn main() {
     let mut app = VulkanApp::try_new(window_, app_name).unwrap();
 
     let image_count = app.get_swapchain_images_count();
-    let mut frame_res = app.get_frame_resources(
-        image_count,
-        get_frame_resources
+    let mut frame_res: FrameResources<ImguiFrameResources> = app.get_frame_resources::<FrameResources<ImguiFrameResources>>(
+        image_count
     ).unwrap();
 
     app.init(init_app, &mut frame_res).unwrap();
 
     // Loop until the user closes the window
     while !app.should_close() {
-        app.update(update_app, &mut frame_res).unwrap();
+        app.update(
+            update_app::<ImguiFrameResources, ResourcesSphere>,
+            &mut frame_res
+        ).unwrap();
         app.render(render_frame_app, &mut frame_res).unwrap();
+
+        let (width, height) = app.window.get_width_height();
+        if width == 0 || height == 0 {
+            // Окно минимизировано или скрыто, ждем восстановления
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            continue;
+        }
+
     }
 
     app.device_wait_idle().unwrap();

@@ -17,15 +17,20 @@ use super::descriptor::descriptor_pool::VulaknDescriptorPool;
 pub type AppVkResult<T> = Result<T, &'static str>;
 
 // Трейт для использования шаблонов в типах ресурсов
-pub trait SceneResources {}
+pub trait SceneResources {
+    type ReturnType: SceneResources;
+    fn get_frame_resources(app: &VulkanApp, image_count: u32) -> AppVkResult<Self::ReturnType>;
+    fn init_framebuffer(&mut self, app: &VulkanApp) -> AppVkResult<()>;
+}
 
 pub struct VulkanApp {
-    pub frame_index: usize,
+    pub frame_index: u32,
     pub command_pool: VulkanCommandPool,
     pub descriptor_pool: VulaknDescriptorPool,
     pub swapchain: VulkanSwapchain,
     pub core: VulkanCore,
     pub window: Window,
+    pub image_count: u32,
 }
 
 impl VulkanApp {
@@ -45,17 +50,20 @@ impl VulkanApp {
             vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER
         )?;
 
+        let image_count = vk_swapchain.images.len() as u32;
+
         let pool_size = vec![
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::UNIFORM_BUFFER,
-                descriptor_count: vk_swapchain.images.len() as u32 * 2
+                descriptor_count: image_count * 2
             },
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                descriptor_count: vk_swapchain.images.len() as u32
+                descriptor_count: image_count
             },
         ];
-        let max_sets = vk_swapchain.images.len() as u32 * 3;
+
+        let max_sets = image_count * 3;
         let dsc_pool = VulaknDescriptorPool::try_new(
             &vk_core._logical_device,
             &pool_size, 
@@ -69,6 +77,7 @@ impl VulkanApp {
             descriptor_pool: dsc_pool,
             frame_index: 0,
             window: window,
+            image_count: image_count,
         })
     }
 
@@ -103,7 +112,7 @@ impl VulkanApp {
         ) -> AppVkResult<()>,
         resources: &mut R
     ) -> Result<(), &'static str> {
-        self.frame_index = (self.frame_index + 1) % self.swapchain.images.len();
+        self.frame_index = (self.frame_index + 1) % self.image_count;
         present(self, resources)
     }
 
@@ -118,20 +127,13 @@ impl VulkanApp {
 
     pub fn get_frame_resources<R: SceneResources>(
             &self,
-            image_count: u32,
-            func: fn(
-                app: &VulkanApp,
-                image_count: u32
-            ) -> AppVkResult<R>
-        ) -> AppVkResult<R>{
-            func(
-                &self,
-                image_count
-            )
+            image_count: u32
+        ) -> AppVkResult<R::ReturnType> {
+            R::get_frame_resources(&self, image_count)
     }
 
     pub fn get_swapchain_images_count(&self) -> u32 {
-        self.swapchain.images.len() as u32
+        self.image_count as u32
     }
 
     pub fn device_wait_idle(&self) -> Result<(), &'static str>{
@@ -142,6 +144,37 @@ impl VulkanApp {
 
     pub fn should_close(&self) -> bool {
         self.window.should_close()
+    }
+
+    pub fn recreate_swapchain(&mut self) -> AppVkResult<()> {
+        self.device_wait_idle()?;
+
+        let (width, height) = self.window.get_width_height();
+        if width == 0 || height == 0 {
+            // Минимизированное окно, пропускаем пересоздание
+            return Ok(());
+        }
+        
+        // // Уничтожаем старые ресурсы
+        // self.swapchain.destroy_framebuffers();
+        // self.swapchain.destroy_images();
+        
+        // Пересоздаем swapchain
+        let vk_swapchain = VulkanSwapchainBuilder::new(&self.core)
+            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST)
+            .extent(vk::Extent2D { width, height })
+            .old_swapchain(self.swapchain.swapchain)
+            .build()?;
+            
+        // std::mem::swap(&mut self.swapchain, &mut vk_swapchain);
+        self.swapchain = vk_swapchain;
+        self.image_count = self.swapchain.images.len() as u32;
+        // Обновляем extent в resources
+        Ok(())
+    }
+
+    pub fn get_swapchain_extent(&self) -> vk::Extent2D {
+        self.swapchain.extent
     }
 
 }

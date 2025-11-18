@@ -53,21 +53,11 @@ const KEY_CODES: &[Key] = &[
 
 pub type MWResult<T> = Result<T, &'static str>;
 pub struct Window {
-    _window: PWindow,
+    pub _window: PWindow,
     _receiver: GlfwReceiver<(f64, WindowEvent)>,
     _glfw: Glfw,
-    _width: u32,
-    _height: u32,
-}
-
-fn callback_window(time: f64, event: WindowEvent, window: &mut PWindow) -> () {
-    // println!("{:?}", event);
-    match event {
-        glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
-            window.set_should_close(true);
-        },
-        _ => {},
-    }
+    pub _width: u32,
+    pub _height: u32,
 }
 
 impl Window {
@@ -77,7 +67,7 @@ impl Window {
             .map_err(|_| "Failed to initialize GLFW")?;
         
         glfw.window_hint(WindowHint::ClientApi(glfw::ClientApiHint::NoApi));
-        glfw.window_hint(WindowHint::Resizable(false));
+        glfw.window_hint(WindowHint::Resizable(true));
 
         let (mut window, receiver) = glfw.create_window(width, height, title, mode)
             .ok_or("Failed to create GLFW window")?;
@@ -102,7 +92,16 @@ impl Window {
         // нельзя забывать запрашивать ивенты 
         self._glfw.poll_events();
         for (time, event) in glfw::flush_messages(&self._receiver) {
-            callback_window(time, event, &mut self._window);
+            match event {
+                glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
+                    self._window.set_should_close(true);
+                },
+                glfw::WindowEvent::FramebufferSize(width, height) => {
+                    self._width = width as u32;
+                    self._height = height as u32;
+                },
+                _ => {},
+            }
         }
     }
 
@@ -137,7 +136,7 @@ impl Window {
         // self._glfw.get_required_instance_extensions()
     }
 
-    pub fn update_imgui_io(&mut self, io: &mut imgui::Io) {
+    pub fn update_imgui_io(&self, io: &mut imgui::Io) {
         let (w, h) = (self._width, self._height);
         io.display_size = [w as f32, h as f32];
         io.display_framebuffer_scale = [1.0, 1.0];

@@ -1,6 +1,6 @@
 [package]
 name = "computer_graphics"
-version = "0.0.1"
+version = "1.0.0"
 edition = "2024"
 authors = ["DeZtrOiD"]
 build = "build.rs"
@@ -10,3 +10,4 @@ ash = {version = "0.38.0"}
 glfw = { version = "0.60.0", features = ["vulkan"] }
 imgui = "0.12.0"
 imgui-rs-vulkan-renderer = "1.16.0"
+
