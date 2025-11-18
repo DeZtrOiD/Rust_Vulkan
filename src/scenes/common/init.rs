@@ -1,5 +1,5 @@
 
-use crate::vulkan_wr::{app::SceneResources, sampler::VulkanSamplerBuilder};
+use crate::vulkan_wr::{app::SceneResources};
 
 use super::{
     frame_resources::{FrameResources},
@@ -86,9 +86,9 @@ pub fn init_app<R: ImguiResources + Default>(app: &mut VulkanApp, resources: &mu
     )?;
 
     resources.render_pass = Some(render_pass);
-    
-    // ----- IMGUI ------  0 место 
-    resources.vec_objects.push(RenderObjectEnum::ImGui(VulkanImgui::<R>::init(
+
+
+    resources.vec_objects.push(RenderObjectEnum::Sphere(SphereObject::init(
             app,
             &mut InitFrameResources {
                 render_pass: Some(resources.render_pass.as_ref().unwrap()),
@@ -97,8 +97,8 @@ pub fn init_app<R: ImguiResources + Default>(app: &mut VulkanApp, resources: &mu
             }
         )?)
     );
-
-    resources.vec_objects.push(RenderObjectEnum::Sphere(SphereObject::init(
+    // ----- IMGUI ------  СНОВА СНОВА ПОСЛЕДНИЙ 
+    resources.vec_objects.push(RenderObjectEnum::ImGui(VulkanImgui::<R>::init(
             app,
             &mut InitFrameResources {
                 render_pass: Some(resources.render_pass.as_ref().unwrap()),

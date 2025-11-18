@@ -3,9 +3,6 @@ use ash::vk;
 use super::super::super::vulkan_wr::{
     app::{VulkanApp, SceneResources},
     render_pass::pass::VulkanRenderPass,
-    descriptor::{descriptor_set_layout::VulkanDescriptorSetLayout, descriptor_set::VulkanDescriptorSet},
-    pipeline::{pipeline_layout::VulkanPipelineLayout, pipeline::VulkanPipeline},
-    buffer::buffer::VulkanBuffer,
     framebuffer::VulkanFramebuffer,
     image::{image_view::{VulkanImageView, VulkanImageViewBuilder}, image::{VulkanImage, VulkanImageBuilder}},
     command_pb::command_buffer::VulkanCommandBuffer,
@@ -13,13 +10,7 @@ use super::super::super::vulkan_wr::{
         semaphore::VulkanSemaphore,
         fence::VulkanFence,
     },
-    sampler::VulkanSampler,
-    ImGui_wr::{VulkanImgui, ImguiResources},
-    renderable_traits::{
-        InitObject, InitObjectResources,
-        RenderObject, RenderObjectResources,
-        UpdateObject, UpdateObjectResources,
-        ShutdownObject, ShutdownObjectResources},
+    ImGui_wr::{ImguiResources},
 };
 
 // use super::objects::{SphereObject, InitSphereObject};

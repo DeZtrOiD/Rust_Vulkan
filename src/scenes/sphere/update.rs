@@ -1,14 +1,12 @@
 
 use super::{
-    super::common::frame_resources::{FrameResources},
     uniform::Uniforms,
     objects::{UpdateSphereObject, SphereObject},
 };
 use super::super::super::vulkan_wr::{
     app::VulkanApp,
     types::{matrix::Matrix, rotation_matrix::RotationMatrix},
-    ImGui_wr::{ImGUIUniform, UpdateImguiResources, VulkanImgui},
-    renderable_traits::UpdateObject,
+    ImGui_wr::{UpdateImguiResources, VulkanImgui},
     renderable_traits::UpdateObjectResources,
 };
 use super::frame_resources::ImguiFrameResources;
@@ -55,12 +53,19 @@ impl UpdateImguiResources<ImguiFrameResources> for ResourcesSphere {
         
         // Пульсация масштаба
         self.aimation_time = imgui.resources.aimation_time;
-        imgui.resources.pulse_scale = 1.0 + 0.3 * (self.aimation_time * 2.0).sin();
+        let t = self.aimation_time;
+        imgui.resources.pulse_scale = 1.0 + 0.3 * (t * 2.0).sin();
+
+        let a = 0.8;
+        let b = 0.2;
+        let x = a * (t).sin();
+        let y = b * (t).sin() * (t).cos();
+        let offset = Matrix::translate(x, y, 0.0);
 
         // Матрица модели с пульсацией
         let scale_matrix = Matrix::scale(imgui.resources.pulse_scale, imgui.resources.pulse_scale, imgui.resources.pulse_scale);
 
-        let model_matrix = scale_matrix;
+        let model_matrix = offset * scale_matrix * Matrix::rotation_x(t);
         
         // Матрица вида с вращением камеры
         let view_matrix = Matrix::rotation_x(imgui.resources.camera_rotation[1]) * 

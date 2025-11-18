@@ -14,14 +14,12 @@ use scenes::common::{
     frame_resources::FrameResources,
     init::init_app,
     render_frame::render_frame_app,
-    renderable_object::RenderObjectEnum,
     shutdown::shutdown_app,
     update::update_app,
 };
 
 use scenes::sphere::{
     frame_resources::ImguiFrameResources,
-    objects::SphereObject,
     update::ResourcesSphere,
 };
 

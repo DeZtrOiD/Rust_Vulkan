@@ -6,9 +6,7 @@ use crate::vulkan_wr::renderable_traits::RenderFrameResources;
 use super::frame_resources::FrameResources;
 use super::super::super::vulkan_wr::{
     app::VulkanApp,
-    command_pb::command_buffer::VulkanCommandBuffer,
-    ImGui_wr::{ImGUIUniform},
-    renderable_traits::{RenderObject, RenderObjectResources},
+    renderable_traits::{RenderObject},
     ImGui_wr::ImguiResources,
 };
 

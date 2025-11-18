@@ -1,30 +1,21 @@
 
 use super::super::super::vulkan_wr::{
     app::VulkanApp,
-    render_pass::{subpass::SubpassConfigBuilder, pass::VulkanRenderPass},
     descriptor::descriptor_set_layout::VulkanDescriptorSetLayout,
     pipeline::{pipeline_layout::VulkanPipelineLayout, pipeline::VulkanPipelineBuilder},
     shader::VulkanShader,
     buffer::buffer::VulkanBuffer,
-    framebuffer::VulkanFramebuffer,
     types::vertex::Vertex,
     pipeline::pipeline::VulkanPipeline,
     descriptor::descriptor_set::VulkanDescriptorSet,
-    renderable_traits::{
-        InitObject, InitObjectResources,
-        RenderObject, RenderObjectResources,
-        UpdateObject, UpdateObjectResources,
+    renderable_traits::{InitObject, RenderObject, UpdateObject, UpdateObjectResources,
         ShutdownObject, ShutdownObjectResources, InitFrameResources, RenderFrameResources},
 };
 use std::mem::size_of;
 use ash::vk;
-use imgui::internal::RawWrapper;
-
-use crate::vulkan_wr::app::SceneResources;
 
 use super::super::super::vulkan_wr::{
     command_pb::command_buffer::VulkanCommandBuffer,
-    ImGui_wr::{ImGUIUniform},
 };
 
 use super::uniform::Uniforms;

@@ -1,17 +1,12 @@
 
 use super::super::{super::vulkan_wr::{
     app::VulkanApp,
-    types::matrix::Matrix,
-    renderable_traits::{
-        InitObject, InitObjectResources,
-        RenderObject, RenderObjectResources,
-        UpdateObject, UpdateObjectResources,
-        ShutdownObject, ShutdownObjectResources},
+    renderable_traits::{UpdateObjectResources, UpdateObject},
     ImGui_wr::{ImguiResources, UpdateImguiResources},
 }};
 
 use super::super::sphere::objects::UpdateSphereObject;
-use super::renderable_object::{GetFrameObj, RenderObjectEnum};
+use super::renderable_object::{GetFrameObj};
 use super::frame_resources::FrameResources;
 
 pub fn update_app<R: ImguiResources + Default, Res: UpdateObjectResources + UpdateImguiResources<R> + UpdateSphereObject + Default>
@@ -19,15 +14,10 @@ pub fn update_app<R: ImguiResources + Default, Res: UpdateObjectResources + Upda
 
     let mut res_loc = Res::default();
 
-    for res in resources.get_frame_obj()? {
-        match res {
-            RenderObjectEnum::Sphere(sph) => {
-                res_loc.update_sphere(sph, app)?;
-            },
-            RenderObjectEnum::ImGui(im) => {
-                res_loc.update_imgui(im, app)?;
-            }
-        }
+    // IMGUI должен обработаться первым чтобы снять значения с интерфейса 
+    // и сохранить их в res_loc
+    for res in resources.get_frame_obj()?.iter_mut().rev() {
+        res.update(app, &mut res_loc)?;
     }
 
     Ok(())
