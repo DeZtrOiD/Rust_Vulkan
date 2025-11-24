@@ -14,7 +14,7 @@ use ash::vk::{ self, Handle };
 use ash::{ Instance };
 
 
-const KEY_CODES: &[Key] = &[
+pub const KEY_CODES: &[Key] = &[
     Key::Space,
     Key::Apostrophe,
     Key::Comma,
@@ -51,6 +51,114 @@ const KEY_CODES: &[Key] = &[
     Key::Menu,
 ];
 
+pub fn key_to_index(key: glfw::Key) -> Option<usize> {
+    match key {
+        Key::Apostrophe => Some(1),
+        Key::Comma => Some(2),
+        Key::Minus => Some(3),
+        Key::Period => Some(4),
+        Key::Slash => Some(5),
+        Key::Num0 => Some(6),
+        Key::Num1 => Some(7),
+        Key::Num2 => Some(8),
+        Key::Num3 => Some(9),
+        Key::Num4 => Some(10),
+        Key::Num5 => Some(11),
+        Key::Num6 => Some(12),
+        Key::Num7 => Some(13),
+        Key::Num8 => Some(14),
+        Key::Num9 => Some(15),
+        Key::Semicolon => Some(16),
+        Key::Equal => Some(17),
+        Key::A => Some(18),
+        Key::B => Some(19),
+        Key::C => Some(20),
+        Key::D => Some(21),
+        Key::E => Some(22),
+        Key::F => Some(23),
+        Key::G => Some(24),
+        Key::H => Some(25),
+        Key::I => Some(26),
+        Key::J => Some(27),
+        Key::K => Some(28),
+        Key::L => Some(29),
+        Key::M => Some(30),
+        Key::N => Some(31),
+        Key::O => Some(32),
+        Key::P => Some(33),
+        Key::Q => Some(34),
+        Key::R => Some(35),
+        Key::S => Some(36),
+        Key::T => Some(37),
+        Key::U => Some(38),
+        Key::V => Some(39),
+        Key::W => Some(40),
+        Key::X => Some(41),
+        Key::Y => Some(42),
+        Key::Z => Some(43),
+        Key::LeftBracket => Some(44),
+        Key::Backslash => Some(45),
+        Key::RightBracket => Some(46),
+        Key::GraveAccent => Some(47),
+        Key::World1 => Some(48),
+        Key::World2 => Some(49),
+        Key::Escape => Some(50),
+        Key::Enter => Some(51),
+        Key::Tab => Some(52),
+        Key::Backspace => Some(53),
+        Key::Insert => Some(54),
+        Key::Delete => Some(55),
+        Key::Right => Some(56),
+        Key::Left => Some(57),
+        Key::Down => Some(58),
+        Key::Up => Some(59),
+        Key::PageUp => Some(60),
+        Key::PageDown => Some(61),
+        Key::Home => Some(62),
+        Key::End => Some(63),
+        Key::CapsLock => Some(64),
+        Key::ScrollLock => Some(65),
+        Key::NumLock => Some(66),
+        Key::PrintScreen => Some(67),
+        Key::Pause => Some(68),
+        Key::F1 => Some(69),
+        Key::F2 => Some(70),
+        Key::F3 => Some(71),
+        Key::F4 => Some(72),
+        Key::F5 => Some(73),
+        Key::F6 => Some(74),
+        Key::F7 => Some(75),
+        Key::F8 => Some(76),
+        Key::F9 => Some(77),
+        Key::F10 => Some(78),
+        Key::F11 => Some(79),
+        Key::F12 => Some(80),
+        Key::F13 => Some(81),
+        Key::F14 => Some(82),
+        Key::F15 => Some(83),
+        Key::F16 => Some(84),
+        Key::F17 => Some(85),
+        Key::F18 => Some(86),
+        Key::F19 => Some(87),
+        Key::F20 => Some(88),
+        Key::F21 => Some(89),
+        Key::F22 => Some(90),
+        Key::F23 => Some(91),
+        Key::F24 => Some(92),
+        Key::F25 => Some(93),
+        Key::LeftShift => Some(94),
+        Key::LeftControl => Some(95),
+        Key::LeftAlt => Some(96),
+        Key::LeftSuper => Some(97),
+        Key::RightShift => Some(98),
+        Key::RightControl => Some(99),
+        Key::RightAlt => Some(100),
+        Key::RightSuper => Some(101),
+        Key::Menu => Some(102),
+        _ => None,
+    }
+}
+
 pub type MWResult<T> = Result<T, &'static str>;
 pub struct Window {
     pub _window: PWindow,
@@ -58,6 +166,7 @@ pub struct Window {
     _glfw: Glfw,
     pub _width: u32,
     pub _height: u32,
+    pub mouse_captured: bool,
 }
 
 impl Window {
@@ -74,6 +183,8 @@ impl Window {
 
         // начинает собирать ВСЕ ивенты
         window.set_all_polling(true);
+        window.focus();
+        window.set_cursor_mode(glfw::CursorMode::Disabled);
 
         Ok(Self {
             _window: window,
@@ -81,6 +192,7 @@ impl Window {
             _glfw: glfw,
             _width: width,
             _height: height,
+            mouse_captured: true,
         })
     }
 
@@ -136,23 +248,42 @@ impl Window {
         // self._glfw.get_required_instance_extensions()
     }
 
-    pub fn update_imgui_io(&self, io: &mut imgui::Io) {
+    pub fn update_imgui_io(&mut self, io: &mut imgui::Io) {
         let (w, h) = (self._width, self._height);
         io.display_size = [w as f32, h as f32];
         io.display_framebuffer_scale = [1.0, 1.0];
 
-        let (mx, my) = self._window.get_cursor_pos();
-        io.mouse_pos = [mx as f32, my as f32];
-        io.mouse_down[0] = self._window.get_mouse_button( glfw::MouseButtonLeft ) == glfw::Action::Press;
-        io.mouse_down[1] = self._window.get_mouse_button( glfw::MouseButtonRight ) == glfw::Action::Press;
-
         for i in 0..KEY_CODES.len() {
             io.keys_down[i] = self._window.get_key( KEY_CODES[i] ) == glfw::Action::Press;
         }
-
+        
         io.key_alt = self._window.get_key( glfw::Key::LeftAlt ) == glfw::Action::Press;
-        io.key_ctrl = self._window.get_key( glfw::Key::LeftControl ) == glfw::Action::Press;
         io.key_shift = self._window.get_key( glfw::Key::LeftShift ) == glfw::Action::Press;
         io.key_super = self._window.get_key( glfw::Key::LeftSuper ) == glfw::Action::Press;
+        io.key_ctrl = self._window.get_key( glfw::Key::LeftControl ) == glfw::Action::Press;
+
+        io.mouse_down[0] = self._window.get_mouse_button( glfw::MouseButtonLeft ) == glfw::Action::Press;
+        io.mouse_down[1] = self._window.get_mouse_button( glfw::MouseButtonRight ) == glfw::Action::Press;
+
+        if io.key_ctrl && self.mouse_captured {
+            // in imgui
+            let cx = (self._width as f64) / 2.0;
+            let cy = (self._height as f64) / 2.0;
+            self._window.set_cursor_mode(glfw::CursorMode::Normal);
+            self.mouse_captured = false;
+            self._window.set_cursor_pos(cx, cy);
+            let (mx, my) = self._window.get_cursor_pos();
+            io.mouse_pos = [mx as f32, my as f32];
+            io.mouse_delta = [0.0, 0.0];
+        } else if (!io.key_ctrl) && (!self.mouse_captured) {
+            // in scene
+            self._window.set_cursor_mode(glfw::CursorMode::Disabled);
+            self.mouse_captured = true;
+        }
+
+        let (mx, my) = self._window.get_cursor_pos();
+        io.mouse_delta = [mx as f32 - io.mouse_pos[0], my as f32 - io.mouse_pos[1]];
+        io.mouse_pos = [mx as f32, my as f32];
     }
+
 }

@@ -161,7 +161,7 @@ impl<'a> VulkanSwapchainBuilder<'a> {
         } else {
             formats
                 .iter()
-                .find(|f| f.format == vk::Format::B8G8R8A8_UNORM && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR)
+                .find(|f| f.format == vk::Format::R8G8B8A8_UNORM && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR)
                 .map(|f| (f.format, f.color_space))
                 .unwrap_or_else(|| (formats[0].format, formats[0].color_space))
         };

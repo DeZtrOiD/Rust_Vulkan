@@ -1,4 +1,6 @@
 
+#[cfg(feature = "scene2")]
+use crate::scenes::lighting::objects::LightObject;
 use crate::vulkan_wr::{app::SceneResources};
 
 use super::{
@@ -87,8 +89,18 @@ pub fn init_app<R: ImguiResources + Default>(app: &mut VulkanApp, resources: &mu
 
     resources.render_pass = Some(render_pass);
 
-
+    #[cfg(feature = "scene1")]
     resources.vec_objects.push(RenderObjectEnum::Sphere(SphereObject::init(
+            app,
+            &mut InitFrameResources {
+                render_pass: Some(resources.render_pass.as_ref().unwrap()),
+                upload_cmd: Some(&resources.vec_cmd_primary[0]),
+                fence: Some(&resources.vec_fence[0]),
+            }
+        )?)
+    );
+    #[cfg(feature = "scene2")]
+    resources.vec_objects.push(RenderObjectEnum::Light(LightObject::init(
             app,
             &mut InitFrameResources {
                 render_pass: Some(resources.render_pass.as_ref().unwrap()),

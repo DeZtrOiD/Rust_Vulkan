@@ -16,17 +16,17 @@ pub struct VulkanPipelineLayout {
 impl VulkanPipelineLayout {
     pub fn try_new(
         device: &Device,
-        set_layouts: &[VulkanDescriptorSetLayout],
+        set_layouts: &[vk::DescriptorSetLayout],
         push_constant_ranges: &[vk::PushConstantRange],
     ) -> Result<Self, &'static str> {
 
         // нужен послеовательный блок памяти с ними
-        let raw_layouts: Vec<vk::DescriptorSetLayout> =
-            set_layouts.iter().map(|l| l.layout).collect();
+        // let raw_layouts: Vec<vk::DescriptorSetLayout> =
+        //     set_layouts.iter().map(|l| l.layout).collect();
 
         let create_info = vk::PipelineLayoutCreateInfo{
-            set_layout_count: raw_layouts.len() as u32,
-            p_set_layouts: raw_layouts.as_ptr(),
+            set_layout_count: set_layouts.len() as u32,
+            p_set_layouts: set_layouts.as_ptr(),
             push_constant_range_count: push_constant_ranges.len() as u32,
             p_push_constant_ranges: push_constant_ranges.as_ptr(),
             ..Default::default()

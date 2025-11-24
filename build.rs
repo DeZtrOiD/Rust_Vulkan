@@ -12,8 +12,10 @@ fn main() {
     fs::create_dir_all(&bin_dir).unwrap();
 
     let shaders = [
-        ("vert.vert", "vert.spv"),
-        ("frag.frag", "frag.spv"),
+        ("sphere.vert", "vert_sphere.spv"),
+        ("sphere.frag", "frag_sphere.spv"),
+        ("light.vert", "vert_light.spv"),
+        ("light.frag", "frag_light.spv"),
         ("imgui.vert", "imgui_vert.spv"),
         ("imgui.frag", "imgui_frag.spv"),
     ];

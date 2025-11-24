@@ -95,7 +95,7 @@ pub struct VulkanImgui<R: ImguiResources + Default> {
     pub pipeline_layout: VulkanPipelineLayout,
     pub descriptor_set_layout: Vec<VulkanDescriptorSetLayout>,
     pub uniform_buffers: Vec<VulkanBuffer>,
-    pub staging_buffer: VulkanBuffer,
+    // pub staging_buffer: VulkanBuffer,
     pub vertex_vec: Vec<VulkanBuffer>,
     pub index_vec: Vec<VulkanBuffer>,
     pub font_image: VulkanImage,
@@ -125,37 +125,10 @@ impl <'a, R: ImguiResources + Default> InitObject<InitFrameResources<'a>> for Vu
         imgui.set_log_filename(None);
         let atlas = imgui.fonts().build_rgba32_texture();
 
-        // загрузка текстурного атласа шрифтов из atlas в buffer 
-        let staging_buffer = VulkanBuffer::try_new(
-            &app.core,
-            (atlas.data.len() * size_of::<u8>()) as u64,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-            None, None, None, None
-        )?;
-
-        unsafe {
-            staging_buffer.mem_copy(atlas.data, None, None, None)?;
-        }
-
         let font_extent = vk::Extent3D {
                 width: atlas.width,
                 height: atlas.height,
                 depth: 1,
-        };
-
-        let copy_region = vk::BufferImageCopy {
-            buffer_offset: 0,
-            buffer_row_length: 0,
-            buffer_image_height: 0,
-            image_subresource: vk::ImageSubresourceLayers {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                mip_level: 0,
-                base_array_layer: 0,
-                layer_count: 1,
-            },
-            image_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
-            image_extent: font_extent,
         };
 
         // 11. Создание пайплайна для ImGui
@@ -209,7 +182,7 @@ impl <'a, R: ImguiResources + Default> InitObject<InitFrameResources<'a>> for Vu
             rasterizer_discard_enable: 0,
             polygon_mode: vk::PolygonMode::FILL,
             cull_mode: vk::CullModeFlags::NONE,
-            front_face: vk::FrontFace::COUNTER_CLOCKWISE,
+            front_face: vk::FrontFace::CLOCKWISE,
             line_width: 1.0,
             ..Default::default()
         };
@@ -285,7 +258,7 @@ impl <'a, R: ImguiResources + Default> InitObject<InitFrameResources<'a>> for Vu
         // 11.10. Pipeline layout
         let imgui_pipeline_layout = VulkanPipelineLayout::try_new(
             &app.core._logical_device,
-            imgui_descriptor_set_layout.as_slice(),
+            &[imgui_descriptor_set_layout[0].layout],
             &[],
         )?;
 
@@ -420,89 +393,9 @@ impl <'a, R: ImguiResources + Default> InitObject<InitFrameResources<'a>> for Vu
             );
         }
 
-
-        // он нужен до записи атласа
-        let barrier1 = vk::ImageMemoryBarrier {
-            old_layout: vk::ImageLayout::UNDEFINED,
-            new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            image: font_image.image,
-            subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                level_count: 1,
-                layer_count: 1,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        // он нужен после текстурного атласа
-        let barrier2 = vk::ImageMemoryBarrier {
-            old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            image: font_image.image,
-            subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                level_count: 1,
-                layer_count: 1,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
         let upload_cmd = resources.upload_cmd.as_ref().ok_or("CMD Imgui is not initialized")?;
-        upload_cmd.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT, None)?;
-        // Копирование из staging buffer в атлас. это должно быть один раз
-        unsafe {
-            upload_cmd._device.cmd_pipeline_barrier(
-                upload_cmd._buffer,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier1]
-            );
-
-            // копирование шрифтов 
-            upload_cmd._device.cmd_copy_buffer_to_image(
-                upload_cmd._buffer,
-                staging_buffer.buffer,
-                font_image.image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &[copy_region]
-            );
-
-            upload_cmd._device.cmd_pipeline_barrier(
-                upload_cmd._buffer,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier2]
-            );
-        }
-        upload_cmd.end()?;
-
         let fence = resources.fence.as_ref().ok_or("FENCE Imgui is not initialized")?;
-
-        let submit_info = vk::SubmitInfo {
-            // wait_semaphore_count: 1,
-            // p_wait_semaphores: &image_available.semaphore,
-            // p_wait_dst_stage_mask: wait_stages.as_ptr(),
-            command_buffer_count: 1,
-            p_command_buffers: &upload_cmd._buffer,
-            // signal_semaphore_count: 1,
-            // p_signal_semaphores: &render_finished.semaphore,
-            ..Default::default()
-        };
-        unsafe {
-            app.core._logical_device.reset_fences(&[fence.fence]).map_err(|_| "Err upload_cmd::reset_fences")?;
-        }
-        app.core.queue_submit(&[submit_info], fence.fence)?;
-        unsafe {
-            app.core._logical_device.wait_for_fences(&[fence.fence], true, u64::MAX).map_err(|_| "Err upload_cmd::wait_for_fences")?;
-        }
+        font_image.upload_from_slice(app, upload_cmd, fence, atlas.data, None)?;
 
         let vec_cmd_secondary_imgui = app.command_pool.allocate_command_buffers(app.image_count, vk::CommandBufferLevel::SECONDARY)?;
 
@@ -512,7 +405,6 @@ impl <'a, R: ImguiResources + Default> InitObject<InitFrameResources<'a>> for Vu
             pipeline_layout: imgui_pipeline_layout,
             descriptor_set_layout: imgui_descriptor_set_layout,
             uniform_buffers: imgui_uniform_buffers,
-            staging_buffer: staging_buffer,
             vertex_vec: vertex_vec,
             index_vec: index_vec,
             font_image: font_image,
@@ -526,13 +418,6 @@ impl <'a, R: ImguiResources + Default> InitObject<InitFrameResources<'a>> for Vu
     }
 }
 
-
-// pub struct RenderImguiResources<'a> {
-//         pub render_pass: &'a VulkanRenderPass,
-//         pub framebuffer: &'a VulkanFramebuffer,
-//         // pub window: &'a Window,
-// }
-// .as_ref().ok_or("Err obj is not initialized")?
 
 impl <'a, R: ImguiResources + Default> RenderObject<RenderFrameResources<'a>> for VulkanImgui<R>{
     fn render(
@@ -745,7 +630,7 @@ pub trait UpdateImguiResources<R: ImguiResources + Default> {
     fn update_imgui(&mut self, imgui: & mut VulkanImgui<R>, app: & mut VulkanApp) -> Result<(), &'static str>;
 }
 
-impl<R: ImguiResources + Default, Resources: UpdateImguiResources<R> + UpdateObjectResources> UpdateObject<Resources> for VulkanImgui<R> {
+impl<T, R: ImguiResources + Default, Resources: UpdateImguiResources<R> + UpdateObjectResources<T>> UpdateObject<T, Resources> for VulkanImgui<R> {
     fn update(&mut self, app: & mut VulkanApp, resources: &mut Resources) -> Result<(), &'static str> {
         resources.update_imgui(self, app)?;
         Ok(())

@@ -55,15 +55,23 @@ impl VulkanApp {
         let pool_size = vec![
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::UNIFORM_BUFFER,
-                descriptor_count: image_count * 2
+                descriptor_count: image_count * 20
             },
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                descriptor_count: image_count
+                descriptor_count: image_count * 200
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                descriptor_count: image_count * 200
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC,
+                descriptor_count: image_count * 200
             },
         ];
 
-        let max_sets = image_count * 3;
+        let max_sets = image_count * 200;
         let dsc_pool = VulaknDescriptorPool::try_new(
             &vk_core._logical_device,
             &pool_size, 

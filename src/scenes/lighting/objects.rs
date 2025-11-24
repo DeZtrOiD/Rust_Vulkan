@@ -1,117 +1,144 @@
 
+use crate::vulkan_wr::types::{figures::{make_cube, make_plane, make_stub_rgba}, matrix::Matrix, model::{MaterialUBO, Mesh, MeshGPU, Model, SubMesh, Transform, TransformUBO}};
+
 use super::super::super::vulkan_wr::{
     app::VulkanApp,
     descriptor::descriptor_set_layout::VulkanDescriptorSetLayout,
     pipeline::{pipeline_layout::VulkanPipelineLayout, pipeline::VulkanPipelineBuilder},
     shader::VulkanShader,
     buffer::buffer::VulkanBuffer,
-    types::vertex::VulkanVertex,
+    types::{vertex::VulkanVertex, vector::VulkanVector},
     pipeline::pipeline::VulkanPipeline,
     descriptor::descriptor_set::VulkanDescriptorSet,
     renderable_traits::{InitObject, RenderObject, UpdateObject, UpdateObjectResources,
         ShutdownObject, ShutdownObjectResources, InitFrameResources, RenderFrameResources},
+    texture::{TextureGPU}
 };
-use std::mem::size_of;
+use std::{f32::consts::PI, mem::size_of};
 use ash::vk;
-
 use super::super::super::vulkan_wr::{
     command_pb::command_buffer::VulkanCommandBuffer,
 };
+use std::collections::HashMap;
+use std::path::Path;
 
-use super::uniform::Uniforms;
+use super::uniform::{Uniforms};
+use std::path::PathBuf;
 
-pub struct SphereObject {
+
+pub struct Positions {
+    pub view_pos: VulkanVector<3>, 
+}
+
+impl Default for Positions {
+    fn default() -> Self {
+        Self { view_pos: VulkanVector::new([0.0, 0.0, -3.0]) }
+    }
+}
+
+pub struct LightObject {
+    pub meshes: Vec<MeshGPU>,
     pub cmd_vec: Vec<VulkanCommandBuffer>,
     pub pipeline: VulkanPipeline,
     pub pipeline_layout: VulkanPipelineLayout,
     pub descriptor_set_layout: Vec<VulkanDescriptorSetLayout>,
+
+    pub sampler_set_layout: Vec<VulkanDescriptorSetLayout>,
+    pub material_set_layout: Vec<VulkanDescriptorSetLayout>,
+    pub model_set_layout: Vec<VulkanDescriptorSetLayout>,
+
     pub uniform_buffers: Vec<VulkanBuffer>,
-    pub vertex_vec: Vec<VulkanBuffer>,
-    pub index_vec: Vec<VulkanBuffer>,
     pub descriptor_sets: Vec<VulkanDescriptorSet>,
-    pub index_count: u32,
+    pub material_sets: Vec<VulkanDescriptorSet>,
+    pub model_sets: Vec<VulkanDescriptorSet>,
+
+    pub pos: Positions,
 }
 
-
-impl<'a> InitObject<InitFrameResources<'a>> for SphereObject {
-    type OutObject = SphereObject;
+impl<'a> InitObject<InitFrameResources<'a>> for LightObject {
+    type OutObject = LightObject;
     fn init(app: & mut VulkanApp, resources: &mut InitFrameResources) -> Result<Self::OutObject, &'static str> {
 
-    // 3. Vertex buffer
-    // choose stacks and slices so that faces ~ 100. faces = stacks * slices * 2
-    let stacks: usize = 10; // latitude divisions
-    let slices: usize = 10;  // longitude divisions -> faces = 10*5*2 = 100
+    let obj_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("obj_3d");
 
-    let mut vertices: Vec<VulkanVertex> = Vec::new();
-    let mut indices: Vec<u32> = Vec::new();
+    let path_to_obj = obj_dir.join("car").join("Car.obj");
+    let path_to_obj_str = path_to_obj.to_str().unwrap();
+    // загружаем модель через tobj
+    let mut model = Model::try_new(path_to_obj_str)?;
+    model.transform.rotation = VulkanVector::new([PI/2.0, 0.0, 0.0]);
+    model.transform.position = VulkanVector::new([0.0, 0.0, 1.0]);
 
-    // x = x0 + R · sin θ · cos φ
-    // y = y0 + R · sin θ · sin φ
-    // z = z0 + R · cos θ
-    // parametric sphere (radius = 0.8)
-    let radius: f32 = 0.5;
-    for i in 0..=stacks {
-        let v = i as f32 / stacks as f32;
-        let theta = v * std::f32::consts::PI; // 0..PI
-        for j in 0..=slices {
-            let u = j as f32 / slices as f32;
-            let phi = u * 2.0 * std::f32::consts::PI; // 0..2PI
+    let mut gpu_meshes = Vec::new();
+    let mut material_map: HashMap<String, String> = HashMap::new();
 
-            let x = radius * theta.sin() * phi.cos();
-            let y = radius * theta.cos();
-            let z = radius * theta.sin() * phi.sin();
+    let alignment = 256 as u64;  // aligned_size GPU
+    let mat_size = std::mem::size_of::<MaterialUBO>() as u64;
+    let aligned_size = ((mat_size + alignment - 1) / alignment) * alignment;
 
-            // цвет зависит от параметров (u,v) — даём разноцветный градиент по вершинам
-            let r = u;
-            let g = v;
-            // немного синей составляющей от высоты, чтобы грани внутри различались
-            let b = 1.0 - (theta / std::f32::consts::PI);
+    
+    let sampler_layout = VulkanDescriptorSetLayout::try_new(
+        &app.core._logical_device,
+        &vec![
+            vk::DescriptorSetLayoutBinding {
+                binding: 0,
+                descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::FRAGMENT,
+                ..Default::default()
+            }
+        ],
+        None
+    )?;
+    let sampler_set_layout = vec![sampler_layout];
+    
+    let material_layout = VulkanDescriptorSetLayout::try_new(
+        &app.core._logical_device,
+        &vec![
+            vk::DescriptorSetLayoutBinding {
+                binding: 0,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::FRAGMENT,
+                ..Default::default()
+            }
+        ],
+        None
+    )?;
+    let material_set_layout = vec![material_layout];
 
-            vertices.push(VulkanVertex { pos: [x, y, z], color: [r, g, b], ..Default::default()});
-        }
-    }
+    let mut tmp = model.to_gpu_meshes(app, resources, sampler_set_layout.as_slice(), alignment)?; 
+    gpu_meshes.append(&mut tmp);
+    let mut model = Model {
+        meshes: vec![make_plane([1.0,0.0,0.0])],
+        transform: Transform{ scale: VulkanVector::new([10.0,10.0,1.0]) ,..Default::default()},
+        albedo_color: VulkanVector::new([1.0,1.0,1.0]),
+    };
+    gpu_meshes.append(&mut model.to_gpu_meshes(app, resources, sampler_set_layout.as_slice(), alignment)?);
+    let mut model = Model {
+        meshes: vec![make_cube(None)],
+        transform: Transform{ position: VulkanVector::new([0.0,0.0,0.5001]),scale: VulkanVector::new([2.0, 2.0, 0.5]),..Default::default()},
+        albedo_color: VulkanVector::new([1.0,1.0,1.0]),
+    };
+    gpu_meshes.append(&mut model.to_gpu_meshes(app, resources, sampler_set_layout.as_slice(), alignment)?);
 
-    let row_len = slices + 1;  // количество вершин с одной широтой (одна "строка" долготы)
-    for i in 0..stacks {
-        for j in 0..slices {
-            // вершины 4х угольника
-            let a = (i * row_len + j) as u32;
-            let b = ((i + 1) * row_len + j) as u32;
-            let c = (i * row_len + (j + 1)) as u32;
-            let d = ((i + 1) * row_len + (j + 1)) as u32;
+    //
+    let model_layout= VulkanDescriptorSetLayout::try_new(
+        &app.core._logical_device,
+        &vec![
+            // set 4 binding 0
+            vk::DescriptorSetLayoutBinding {
+                binding: 0,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::VERTEX,
+                ..Default::default()
+            }
+        ],
+        None
+    )?;
+    let model_set_layout = vec![model_layout];
 
-            // triangle 1: a, b, c
-            indices.push(a); indices.push(b); indices.push(c);
-            // triangle 2: c, b, d
-            indices.push(c); indices.push(b); indices.push(d);
-        }
-    }
-
-    let vertex_buffers = vec![VulkanBuffer::try_new(
-        &app.core,
-        (size_of::<VulkanVertex>() * vertices.len()) as u64,
-        vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
-        vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
-        None, None, None, None
-    )?];
-
-    unsafe {
-        vertex_buffers[0].mem_copy(vertices.as_slice(), None, None, None)?;  // not as_ref. надо потом везде поменять
-    }
-
-    let index_count = indices.len();
-    // create index buffer
-    let index_buffers = vec![VulkanBuffer::try_new(
-        &app.core,
-        (std::mem::size_of::<u32>() * index_count) as u64,
-        vk::BufferUsageFlags::INDEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
-        vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        None, None, None, None
-    )?];
-
-    unsafe {
-        index_buffers[0].mem_copy(indices.as_slice(), None, None, None)?;
-    }
 
     // 4. Descriptor set layout - определяет структуру наборов дескрипторов
     let desc_vec = vec![
@@ -132,17 +159,21 @@ impl<'a> InitObject<InitFrameResources<'a>> for SphereObject {
     )?];
 
 
+    let layoyt_vec = vec![descriptor_set_layout[0].layout, sampler_set_layout[0].layout,
+        material_set_layout[0].layout, model_set_layout[0].layout];
+
     // 5. Pipeline layout - интерфейс пайплайна к ресурсам
     let pipeline_layout = VulkanPipelineLayout::try_new(
         &app.core._logical_device,
-        &[descriptor_set_layout[0].layout],
+        layoyt_vec.as_slice(),
         &[],
     )?;
 
     // 6. Shader stages. Стоит это все внутрь шейдера засунуть.
+
     let shader_dir = std::env::var("SHADER_PATH").unwrap();
-    let vert_path = format!("{}/vert_sphere.spv", shader_dir);
-    let frag_path = format!("{}/frag_sphere.spv", shader_dir);
+    let vert_path = format!("{}/vert_light.spv", shader_dir);
+    let frag_path = format!("{}/frag_light.spv", shader_dir);
 
     let vert_shader = VulkanShader::try_new(&app.core._logical_device, &vert_path)?;
     let frag_shader = VulkanShader::try_new(&app.core._logical_device, &frag_path)?;
@@ -261,6 +292,42 @@ impl<'a> InitObject<InitFrameResources<'a>> for SphereObject {
         &[]
     );
 
+    let mut material_sets = vec![];
+    let mut model_sets = vec![];
+    for _ in 0..gpu_meshes.len() { 
+        material_sets.append(&mut app.descriptor_pool.allocate_descriptor_sets(
+            material_set_layout.as_ref() // тут он один
+        )?);
+        model_sets.append(& mut app.descriptor_pool.allocate_descriptor_sets(
+            model_set_layout.as_ref() // тут он один
+        )?);
+    }
+
+
+    for (mi, ms) in gpu_meshes.iter().enumerate() {
+        let (mut write, info) = material_sets[mi].write_buffer(
+            0,
+            ms.material_ubo.buffer,
+            0, //ms as u64 * aligned_size,
+            aligned_size, //aligned_size, // TODO это неправильно для Dynamic
+            vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC,
+        );
+        write.p_buffer_info = &info;
+        app.descriptor_pool.update_descriptor_sets(&[write], &[]);
+    }
+
+    for ms in 0..gpu_meshes.len() as usize {
+        let (mut write, info) = model_sets[ms].write_buffer(
+            0,
+            gpu_meshes[ms].transform_ubo.buffer,
+            0,
+            aligned_size,
+            vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC,
+        );
+        write.p_buffer_info = &info;
+        app.descriptor_pool.update_descriptor_sets(&[write], &[]);
+    }
+
     // let start_time = std::time::Instant::now();
 
     let vec_cmd_secondary = app.command_pool.allocate_command_buffers(app.image_count, vk::CommandBufferLevel::SECONDARY)?;
@@ -271,16 +338,20 @@ impl<'a> InitObject<InitFrameResources<'a>> for SphereObject {
         pipeline_layout: pipeline_layout,
         descriptor_set_layout: descriptor_set_layout,
         uniform_buffers: uniform_buffers,
-        vertex_vec: vertex_buffers,
-        index_vec: index_buffers,
         descriptor_sets: descriptor_sets,
-        index_count: index_count as u32,
+        pos: Positions::default(),
+        meshes: gpu_meshes,
+        sampler_set_layout: sampler_set_layout,
+        material_set_layout: material_set_layout,
+        material_sets: material_sets,
+        model_set_layout: model_set_layout,
+        model_sets: model_sets,
     })
     }
 }
 
 
-impl<'a> RenderObject<RenderFrameResources<'a>> for SphereObject {
+impl<'a> RenderObject<RenderFrameResources<'a>> for LightObject {
     fn render(&mut self,
             app: & mut VulkanApp,
             resources: &RenderFrameResources<'a>,
@@ -331,32 +402,36 @@ impl<'a> RenderObject<RenderFrameResources<'a>> for SphereObject {
                     }
                 ]
             );
-            cmd.bind_vertex_buffers(
-                0,  // первый binding
-                &[self.vertex_vec[0].buffer],
-                &[0] // офсет binding'ов
-            );
 
-            cmd.bind_index_buffer(
-                self.index_vec[0].buffer,
-                0, // офсет
-                vk::IndexType::UINT32
-            );
+            let alignment = 256 as u64;  // aligned_size GPU
+            for (mi, gpu_mesh) in self.meshes.iter().enumerate() {
 
-            cmd.bind_descriptor_sets(
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline_layout.layout,
-                0,
-                &[self.descriptor_sets[current_frame].set],
-                &[],
-            );
-            cmd.draw_indexed(
-                self.index_count,
-                1,  // Количество инстансов
-                0,  // первый индекс
-                0,  // офсет в вершинах
-                0  // первый инстанс
-            );
+                cmd.bind_vertex_buffers(0, &[gpu_mesh.vertex_buf.buffer], &[0]);
+                cmd.bind_index_buffer(gpu_mesh.index_buf.buffer, 0, vk::IndexType::UINT32);
+
+                let ubo_ds = &self.descriptor_sets[current_frame];
+                cmd.bind_descriptor_sets(vk::PipelineBindPoint::GRAPHICS, self.pipeline_layout.layout, 0, &[ubo_ds.set], &[]);
+                
+                let aligned_size = ((std::mem::size_of::<TransformUBO>() as u64 + alignment - 1) / alignment) * alignment;
+                let mfr_offset = aligned_size as u32 * current_frame as u32; //si
+                cmd.bind_descriptor_sets(vk::PipelineBindPoint::GRAPHICS, self.pipeline_layout.layout, 3, &[self.model_sets[mi].set], &[mfr_offset]);
+
+                for (si, sm) in gpu_mesh.submeshes.iter().enumerate() {
+                    let ubo_ms = &self.material_sets[mi];
+                    // 2) bind texture set (set = 1)
+                    let tex_id = sm.texture_id;
+                    let tex_ds = &gpu_mesh.texture[tex_id].descriptor_sets[current_frame];
+                    cmd.bind_descriptor_sets(vk::PipelineBindPoint::GRAPHICS, self.pipeline_layout.layout, 1, &[tex_ds.set], &[]);
+
+                    let mat_size = std::mem::size_of::<MaterialUBO>() as u64;
+                    let aligned_size = ((mat_size + alignment - 1) / alignment) * alignment;
+                    
+                    let sm_offset = aligned_size as u32 * si as u32; //si
+                    cmd.bind_descriptor_sets(vk::PipelineBindPoint::GRAPHICS, self.pipeline_layout.layout, 2, &[ubo_ms.set], &[sm_offset]);
+
+                    cmd.draw_indexed(sm.index_count as u32, 1, sm.index_offset as u32, 0, 0);
+               }
+            }
         }
         cmd.end()?;
     Ok(()) 
@@ -364,21 +439,21 @@ impl<'a> RenderObject<RenderFrameResources<'a>> for SphereObject {
 }
 
 
-struct ShutdownSphereObject {}
-impl ShutdownObjectResources for ShutdownSphereObject {}
-impl ShutdownObject<ShutdownSphereObject> for SphereObject {
-    fn shutdown(app: & mut VulkanApp, resources: &mut ShutdownSphereObject) -> Result<(), &'static str> {
+struct ShutdownLightObject {}
+impl ShutdownObjectResources for ShutdownLightObject {}
+impl ShutdownObject<ShutdownLightObject> for LightObject {
+    fn shutdown(app: & mut VulkanApp, resources: &mut ShutdownLightObject) -> Result<(), &'static str> {
         Ok(())
     }
 }
 
-pub trait UpdateSphereObject {
-    fn update_sphere(&mut self, obj: &mut SphereObject, app: & mut VulkanApp) -> Result<(), &'static str>;
+pub trait UpdateLightObject {
+    fn update_light(&mut self, obj: &mut LightObject, app: & mut VulkanApp) -> Result<(), &'static str>;
 }
 
-impl<T, Resources: UpdateObjectResources<T> + UpdateSphereObject> UpdateObject<T, Resources> for SphereObject {
+impl<T, Resources: UpdateObjectResources<T> + UpdateLightObject> UpdateObject<T, Resources> for LightObject {
     fn update(&mut self, app: & mut VulkanApp, resources: &mut Resources) -> Result<(), &'static str> {
-        resources.update_sphere(self, app)?;
+        resources.update_light(self, app)?;
         Ok(())
     }
 }

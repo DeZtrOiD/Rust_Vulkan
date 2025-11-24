@@ -15,3 +15,4 @@ pub mod types;
 pub mod sampler;
 pub mod ImGui_wr;
 pub mod renderable_traits;
+pub mod texture;

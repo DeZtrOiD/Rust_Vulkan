@@ -352,6 +352,7 @@ impl VulkanCoreBuilder {
         let mut candidates = Vec::new();
         for pd in devices {
             let props = unsafe { instance.get_physical_device_properties(pd) };
+            print!("prop: \n{:?}={}\n", props.device_name_as_c_str(), props.limits.min_uniform_buffer_offset_alignment);
             let queues_family = unsafe { instance.get_physical_device_queue_family_properties(pd) };
             let features = unsafe { instance.get_physical_device_features(pd) };
             if features.sampler_anisotropy == 0 { continue; }

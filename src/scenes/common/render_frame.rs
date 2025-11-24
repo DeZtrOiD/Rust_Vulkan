@@ -61,7 +61,7 @@ pub fn render_frame_app<R: ImguiResources + Default>(app: & mut VulkanApp, resou
         cmd_primary.reset(None)?;
         cmd_primary.begin(vk::CommandBufferUsageFlags::SIMULTANEOUS_USE, None)?;
         let clear_values = [
-            vk::ClearValue { color: vk::ClearColorValue { float32: [92.0/255.0, 234.0/255.0, 197.0/255.0, 1.0] } },
+            vk::ClearValue { color: vk::ClearColorValue { float32: [10.0/255.0, 10.0/255.0, 50.0/255.0, 1.0] } },
             vk::ClearValue { depth_stencil: vk::ClearDepthStencilValue { depth: 1.0, stencil: 0 } }
         ];
         let begin_info = vk::RenderPassBeginInfo {
@@ -84,7 +84,10 @@ pub fn render_frame_app<R: ImguiResources + Default>(app: & mut VulkanApp, resou
             let buff_vec: Vec<vk::CommandBuffer> = resources.vec_objects.iter().map(|obj|
                 match obj {
                     RenderObjectEnum::ImGui(objj) => {objj.cmd_vec[current_frame as usize]._buffer}
+                    #[cfg(feature = "scene1")]
                     RenderObjectEnum::Sphere(objj) => {objj.cmd_vec[current_frame as usize]._buffer}
+                    #[cfg(feature = "scene2")]
+                    RenderObjectEnum::Light(objj) => {objj.cmd_vec[current_frame as usize]._buffer}
                 }
             ).collect();
 

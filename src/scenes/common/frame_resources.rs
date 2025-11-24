@@ -1,4 +1,6 @@
 
+use std::f32::EPSILON;
+
 use ash::vk;
 use super::super::super::vulkan_wr::{
     app::{VulkanApp, SceneResources},
@@ -11,17 +13,74 @@ use super::super::super::vulkan_wr::{
         fence::VulkanFence,
     },
     ImGui_wr::{ImguiResources},
+    types::{vector::VulkanVector, matrix::Matrix},
 };
 
 // use super::objects::{SphereObject, InitSphereObject};
 use super::renderable_object::{RenderObjectEnum, GetFrameObj};
 
-// pub struct ImguiFrameResources {
+#[derive(Clone, Copy)]
+pub struct Camera {
+    pub pos: VulkanVector<3>,
+    pub up: VulkanVector<3>,
+    pub front: VulkanVector<3>,
+    pub yaw: f32,  // rad, 0 -> -Z
+    pub pitch: f32,  // rad [-π/2, π/2]
+    pub view_matrix: Matrix<4, 4>,
+    pub dirty: bool,
+}
 
-// impl ImguiResources for ImguiFrameResources {
+impl Default for Camera {
+    fn default() -> Self {
+        Self {
+            pos: VulkanVector { data: [0.0; 3] },
+            up: VulkanVector { data: [0.0; 3] },
+            front: VulkanVector { data: [0.0; 3] },
+            yaw: 0.0, pitch: 0.0,
+            view_matrix: Matrix::identity(),
+            dirty: true
+        }
+    }
+}
 
-
-// impl Default for ImguiFrameResources {
+impl Camera {
+    pub fn update(&mut self, mouse_delta: [f32; 2], sensitivity: f32) {
+        if mouse_delta[0].abs() > EPSILON * 10.0 || mouse_delta[1].abs() > EPSILON * 10.0 {
+            self.yaw += mouse_delta[0] * sensitivity;
+            self.pitch += mouse_delta[1] * sensitivity;
+            self.pitch = self.pitch.clamp(-1.5, 1.5); // < 90 gimbal lock
+            self.dirty = true;
+        }
+    }
+    pub fn forward(&self) -> VulkanVector<3> {
+        VulkanVector::new([
+            self.yaw.sin() * self.pitch.cos(),  // x
+            self.pitch.sin(),  // y
+            -self.yaw.cos() * self.pitch.cos(),  // z
+        ])
+    }
+    pub fn right(&self) -> VulkanVector<3> {
+        VulkanVector::new([
+            self.yaw.cos(),  //x
+            0.0,  //y
+            self.yaw.sin(),  //z
+        ])
+    }
+    pub fn view_matrix(&mut self) -> Result<Matrix<4, 4>, &'static str> {
+        if self.dirty {
+            let front = self.forward();
+            let target = VulkanVector::new([
+                self.pos[0] + front[0],
+                self.pos[1] + front[1],
+                self.pos[2] + front[2],
+            ]);
+            let up = VulkanVector::new([0.0, 1.0, 0.0]);
+            self.view_matrix = Matrix::look_at(&self.pos, &target, &up)?;
+            self.dirty = false;
+        }
+        Ok(self.view_matrix.clone())
+    }
+}
 
 pub struct FrameResources<R: ImguiResources + Default> {
     pub vec_fence: Vec<VulkanFence>,  // CPU + GPU
@@ -39,6 +98,8 @@ pub struct FrameResources<R: ImguiResources + Default> {
     pub start_time: std::time::Instant,
 
     pub vec_objects: Vec<RenderObjectEnum<R>>,
+
+    pub camera: Camera,
 }
 
 impl<R: ImguiResources + Default> SceneResources for FrameResources<R> {
@@ -91,6 +152,12 @@ impl<R: ImguiResources + Default> SceneResources for FrameResources<R> {
             
             start_time: std::time::Instant::now(),
             vec_objects: vec![],
+            camera: Camera {
+                pos: VulkanVector{data: [0.0, 0.0, 3.0]},
+                up: VulkanVector{data: [0.0, 1.0, 0.0]},
+                front: VulkanVector{data: [0.0, 0.0, 0.0]},
+                ..Default::default()
+            }
         })
     }
 

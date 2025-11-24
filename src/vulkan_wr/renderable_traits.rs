@@ -11,7 +11,10 @@ use super::{
 
 pub trait RenderObjectResources {}
 pub trait InitObjectResources {}
-pub trait UpdateObjectResources {}
+pub trait UpdateObjectResources<T> {
+    fn read(&mut self, arg: &mut T) -> Result<(), &'static str>;
+    fn write(&mut self, arg: &mut T) -> Result<(), &'static str>;
+}
 pub trait ShutdownObjectResources {}
 
 pub trait RenderObject<T: RenderObjectResources> {
@@ -27,7 +30,7 @@ pub trait InitObject<T: InitObjectResources> {
     fn init(app: & mut VulkanApp, resources: &mut T) -> Result<Self::OutObject, &'static str>;
 }
 
-pub trait UpdateObject<T: UpdateObjectResources> {
+pub trait UpdateObject<R, T: UpdateObjectResources<R>> {
     fn update(&mut self, app: & mut VulkanApp, resources: &mut T) -> Result<(), &'static str>;
 }
 

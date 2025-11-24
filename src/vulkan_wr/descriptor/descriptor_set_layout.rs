@@ -37,13 +37,6 @@ impl VulkanDescriptorSetLayout {
             _device: device.clone()
         })
     }
-    // typedef struct VkDescriptorSetLayoutBinding {
-    //     uint32_t              binding;  - is the binding number of this entry and corresponds to a resource of the same binding number in the shader stages. layout(set = 0, binding = 1) 
-    //     VkDescriptorType      descriptorType; - UNIFORM/STORAG/SAMPLER...
-    //     uint32_t              descriptorCount;  - сколько ресурсов в одном биндинге
-    //     VkShaderStageFlags    stageFlags;  - Флаги, указывающие, в каких шейдерных стадиях виден этот binding VERTEX/FRAGMENT/STAGE_ALL/etc
-    //     const VkSampler*      pImmutableSamplers;
-    // } VkDescriptorSetLayoutBinding;
 
 }
 

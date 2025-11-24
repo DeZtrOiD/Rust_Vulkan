@@ -4,88 +4,140 @@
 // Desc: Небольшая обертка для векторов
 // #=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#
 
-use std::{ops::{Add, Mul, Sub}, fmt};
-use super::matrix::Matrix;
+use std::{f32::EPSILON, fmt, ops::{Add, AddAssign, Mul, Sub, SubAssign, Index, IndexMut}};
 
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Vector<T, const SIZE: usize> {
-    pub data: [T; SIZE],
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct VulkanVector<const SIZE: usize> {
+    pub data: [f32; SIZE],
 }
 
-impl<T, const SIZE: usize> Vector<T, SIZE> {
-    pub fn new(data: [T; SIZE]) -> Self {
-        Vector { data }
+impl<const SIZE: usize> VulkanVector<SIZE> {
+    pub fn new(data: [f32; SIZE]) -> Self {
+        VulkanVector { data }
     }
 }
 
-
-impl<T> Vector<T, 4>
-where
-    T: Mul<Output = T> + Add<Output = T> + Copy,
-{    
-    fn dot(&self, other: &Self) -> T {
-        self.data[0] * other.data[0] + 
-        self.data[1] * other.data[1] + 
-        self.data[2] * other.data[2] +
-        self.data[3] * other.data[3]
+impl<const SIZE: usize> VulkanVector<SIZE> {
+    pub fn normalize(&self) -> Result<Self, &'static str> {
+        let norm = (self.data.iter().map(|x| (*x) * (*x)).sum::<f32>()).sqrt();
+        if norm < EPSILON * 10.0 {
+            return Err("Division by 0. Norm is zero.");
+        }
+        let data_norm = std::array::from_fn(|i| self[i] / norm);
+        Ok(Self { data: data_norm })
+    }
+    pub fn dot(&self, other: &Self) -> f32 {
+        self.data.iter().enumerate().map(|(i, val)| val * other[i]).sum()
     }
 }
 
-impl<T> Vector<T, 3>
-where
-    T: Mul<Output = T> + Add<Output = T> + Sub<Output = T> + Copy,
-{    
-    fn dot(&self, other: &Self) -> T {
-        self.data[0] * other.data[0] + 
-        self.data[1] * other.data[1] + 
-        self.data[2] * other.data[2]
-    }
-    
-    fn cross(&self, other: &Self) -> Self {
-        Vector::new([
-            self.data[1] * other.data[2] - self.data[2] * other.data[1],
-            self.data[2] * other.data[0] - self.data[0] * other.data[2],
-            self.data[0] * other.data[1] - self.data[1] * other.data[0],
+impl VulkanVector<3> {
+    pub fn cross(&self, other: &Self) -> Self {
+        VulkanVector::new([
+            self[1] * other[2] - self[2] * other[1],
+            self[2] * other[0] - self[0] * other[2],
+            self[0] * other[1] - self[1] * other[0],
         ])
     }
+    pub fn from4(vec: VulkanVector<4>) -> Self {
+        VulkanVector::new([vec[0], vec[1], vec[2]])
+    }
+    pub fn to4v(&self, f: f32) -> VulkanVector<4> {
+        VulkanVector::new([self[0], self[1], self[2], f])
+    }
 }
-
-impl<T> Vector<T, 2>
-where
-    T: Mul<Output = T> + Add<Output = T> + Copy,
-{    
-    fn dot(&self, other: &Self) -> T {
-        self.data[0] * other.data[0] + self.data[1] * other.data[1]
+impl<const SIZE: usize> From<[f32; SIZE]> for VulkanVector<SIZE> {
+    fn from(value: [f32; SIZE]) -> Self {
+        Self { data: value }
     }
 }
 
-impl<T, const SIZE: usize> Vector<T, SIZE> 
-where
-    T: Default + Copy + From<f32> + Mul<Output = T> + Add<Output = T> + Sub<Output = T>,
-{
-    pub fn rotate(&self, rotation_matrix: &Matrix<T, SIZE, SIZE>) -> Vector<T, SIZE> {
-        // Конвертируем вектор в матрицу-столбец, вращаем и конвертируем обратно
-        let vec_matrix = Matrix::new([self.data]).transpose();
-        let rotated_matrix = rotation_matrix.clone() * vec_matrix;
-        
-        let mut result_data = [T::default(); SIZE];
-        for i in 0..SIZE {
-            result_data[i] = rotated_matrix.data[i][0];
+impl<const SIZE: usize> Into<[f32; SIZE]> for VulkanVector<SIZE> {
+    fn into(self) -> [f32; SIZE] {
+        self.data
+    }
+}
+
+impl VulkanVector<4> {
+    pub fn from3(vec: VulkanVector<3>, f: f32) -> Self {
+        VulkanVector::new([vec[0], vec[1], vec[2], f])
+    }
+    pub fn to3v(&self) -> VulkanVector<3> {
+        if self.data[3].abs() > EPSILON * 100.0 {
+            let inv = 1.0 / self.data[3];
+            VulkanVector { data: [self.data[0] * inv, self.data[1] * inv, self.data[2] * inv] }
+        } else {
+            VulkanVector { data: [self.data[0], self.data[1], self.data[2]] }
         }
-        
-        Vector::new(result_data)
     }
 }
 
-impl<T: fmt::Display, const SIZE: usize> fmt::Display 
-    for Vector<T, SIZE> {
+impl<const SIZE: usize> fmt::Display for VulkanVector<SIZE> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for i in 0..SIZE {
             write!(f, "[")?;
-            write!(f, "{}", self.data[i])?;
+            write!(f, "{}", self[i])?;
             writeln!(f, "]")?;
         }
         Ok(())
+    }
+}
+
+impl<const SIZE: usize> AddAssign for VulkanVector<SIZE> {
+    fn add_assign(&mut self, rhs: Self) {
+        for i in 0..SIZE {
+            self[i] += rhs[i];
+        }
+    }
+}
+
+impl<const SIZE: usize> Mul<f32> for VulkanVector<SIZE> {
+    type Output = VulkanVector<SIZE>;
+    fn mul(self, rhs: f32) -> Self::Output {
+        let mut data = self.data;
+        for i in 0..SIZE {
+            data[i] = data[i] * rhs; 
+        }
+
+        Self { data: data }
+    }
+}
+
+impl<const SIZE: usize> Add for VulkanVector<SIZE> {
+    type Output = VulkanVector<SIZE>;
+    fn add(self, rhs: Self) -> Self::Output {
+        let data: [f32; SIZE] = std::array::from_fn(|i| self[i] + rhs[i]);
+        Self{data: data}
+    }
+}
+
+impl<const SIZE: usize> Sub for VulkanVector<SIZE> {
+    type Output = VulkanVector<SIZE>;
+    fn sub(self, rhs: Self) -> Self::Output {
+        let data: [f32; SIZE] = std::array::from_fn(|i| self[i] - rhs[i]);
+        Self{data: data}
+    }
+}
+
+impl<const SIZE: usize>  SubAssign for VulkanVector<SIZE> {
+    fn sub_assign(&mut self, rhs: Self) {
+        for i in 0..SIZE {
+            self[i] -= rhs[i];
+        }
+    }
+}
+
+impl<const SIZE: usize> Default for VulkanVector<SIZE> { fn default() -> Self { VulkanVector { data: [0.0; SIZE] } } }
+
+impl<const SIZE: usize> Index<usize> for VulkanVector<SIZE> {
+    type Output = f32;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.data[index]
+    }
+}
+
+impl<const SIZE: usize> IndexMut<usize> for VulkanVector<SIZE> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.data[index]   
     }
 }

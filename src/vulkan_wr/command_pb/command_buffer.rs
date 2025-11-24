@@ -75,6 +75,12 @@ impl VulkanCommandBuffer {
         }
     }
 
+    pub unsafe fn push_constants(&self, layout: vk::PipelineLayout, stage_flags: vk::ShaderStageFlags, offset: u32, constants: &[u8]) {
+        unsafe {
+            self._device.cmd_push_constants(self._buffer, layout, stage_flags, offset, constants);
+        }
+    } 
+
     pub unsafe fn bind_vertex_buffers(&self, first_binding: u32, buffers: &[vk::Buffer], offsets: &[vk::DeviceSize]) {
         unsafe {
             self._device.cmd_bind_vertex_buffers(
@@ -144,6 +150,31 @@ impl VulkanCommandBuffer {
             self._device.cmd_end_render_pass(
                 self._buffer
             )
+        }
+    }
+
+    pub unsafe fn pipeline_barrier(
+        &self, src_stage_mask: vk::PipelineStageFlags,
+        dst_stage_mask: vk::PipelineStageFlags, dependency_flags: vk::DependencyFlags,
+        memory_barriers: &[vk::MemoryBarrier<'_>], buffer_memory_barriers: &[vk::BufferMemoryBarrier<'_>],
+        image_memory_barriers: &[vk::ImageMemoryBarrier<'_>]
+    ) {
+        unsafe {
+            self._device.cmd_pipeline_barrier(
+                self._buffer, src_stage_mask, dst_stage_mask,
+                dependency_flags, memory_barriers, buffer_memory_barriers,
+                image_memory_barriers
+            );
+        }
+    }
+
+    pub unsafe fn copy_buffer_to_image(&self, src_buffer: vk::Buffer, dst_image: vk::Image,
+        dst_image_layout: vk::ImageLayout, regions: &[vk::BufferImageCopy]
+    ) {
+        unsafe {
+            self._device.cmd_copy_buffer_to_image(
+                self._buffer, src_buffer, dst_image, dst_image_layout, regions
+            );
         }
     }
 

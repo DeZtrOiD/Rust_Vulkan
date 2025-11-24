@@ -3,7 +3,7 @@ use super::super::super::vulkan_wr::{
     ImGui_wr::{ImguiResources},
 };
 
-pub struct ImguiFrameResourcesSphere {
+pub struct ImguiFrameResourcesLight {
     pub animation_paused: bool,
     pub animation_reverse: bool,
     pub use_perspective: bool,
@@ -14,7 +14,7 @@ pub struct ImguiFrameResourcesSphere {
     pub aimation_time: f32,
 }
 
-impl ImguiResources for ImguiFrameResourcesSphere {
+impl ImguiResources for ImguiFrameResourcesLight {
     fn render_ui(&mut self, ui: &mut imgui::Ui) {
         ui.window("Sphere Controls").build(|| {
             ui.text("Animation Controls:");
@@ -42,7 +42,7 @@ impl ImguiResources for ImguiFrameResourcesSphere {
     }
 }
 
-impl Default for ImguiFrameResourcesSphere {
+impl Default for ImguiFrameResourcesLight {
     fn default() -> Self {
         let time = std::time::Instant::now();
         Self { 

@@ -18,10 +18,16 @@ use scenes::common::{
     update::update_app,
 };
 
+#[cfg(feature = "scene1")]
 use scenes::sphere::{
-    frame_resources::ImguiFrameResources,
+    frame_resources::ImguiFrameResourcesSphere,
     update::ResourcesSphere,
 };
+
+#[cfg(feature = "scene2")]
+use crate::scenes::lighting::frame_resources::ImguiFrameResourcesLight;
+#[cfg(feature = "scene2")]
+use crate::scenes::lighting::update::ResourcesLight;
 
 fn main() {
     let app_name = "RUST_POBEDA";
@@ -32,7 +38,15 @@ fn main() {
     let mut app = VulkanApp::try_new(window_, app_name).unwrap();
 
     let image_count = app.get_swapchain_images_count();
-    let mut frame_res: FrameResources<ImguiFrameResources> = app.get_frame_resources::<FrameResources<ImguiFrameResources>>(
+    #[cfg(feature = "scene1")]
+    let mut frame_res = app.get_frame_resources::<FrameResources<ImguiFrameResourcesSphere>>
+    (
+        image_count
+    ).unwrap();
+
+    #[cfg(feature = "scene2")]
+    let mut frame_res = app.get_frame_resources::<FrameResources<ImguiFrameResourcesLight>>
+    (
         image_count
     ).unwrap();
 
@@ -41,7 +55,10 @@ fn main() {
     // Loop until the user closes the window
     while !app.should_close() {
         app.update(
-            update_app::<ImguiFrameResources, ResourcesSphere>,
+            #[cfg(feature = "scene1")]
+            update_app::<ImguiFrameResourcesSphere, ResourcesSphere>,
+            #[cfg(feature = "scene2")]
+            update_app::<ImguiFrameResourcesLight, ResourcesLight>,
             &mut frame_res
         ).unwrap();
         app.render(render_frame_app, &mut frame_res).unwrap();
@@ -52,7 +69,6 @@ fn main() {
             std::thread::sleep(std::time::Duration::from_millis(100));
             continue;
         }
-
     }
 
     app.device_wait_idle().unwrap();

@@ -7,7 +7,13 @@
 
 use ash::{vk, Device};
 
-use super::super::core::VulkanCore;
+use crate::vulkan_wr::app::VulkanApp;
+
+use super::super::{
+    command_pb::command_buffer::VulkanCommandBuffer,
+    sync::fence::VulkanFence,
+    buffer::buffer::VulkanBuffer,
+    core::VulkanCore};
 
 // =====================================================================
 // VulkanImage
@@ -16,10 +22,119 @@ use super::super::core::VulkanCore;
 pub struct VulkanImage {
     pub image: vk::Image,
     pub memory: Option<vk::DeviceMemory>, // GPU-память, привязанная к изображению. None дяя памяти управляемой swapchain 
-    pub format: vk::Format,  // Формат пикселей (B8G8R8A8_UNORM, D32_SFLOAT...)
+    pub format: vk::Format,  // Формат пикселей (R8G8B8A8_UNORM, D32_SFLOAT...)
     pub extent: vk::Extent3D,  // размеры изображения
     pub usage: vk::ImageUsageFlags,  // Цель использования: COLOR_ATTACHMENT, DEPTH_STENCIL_ATTACHMENT, SAMPLED, TRANSFER_DST...
     _device: Device,
+}
+
+impl VulkanImage {
+    pub fn upload_from_slice(&self,
+        app: &VulkanApp, cmd: &VulkanCommandBuffer, fence: &VulkanFence, data: &[u8],
+        barriers: Option<[vk::ImageMemoryBarrier; 2]>
+    ) -> Result<(), &'static str> {
+        let staging_buffer = VulkanBuffer::try_new(
+            &app.core,
+            (data.len() * size_of::<u8>()) as u64,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            None, None, None, None
+        )?;
+        unsafe {
+            staging_buffer.mem_copy(data, None, None, None)?;
+        }
+
+        let copy_region = vk::BufferImageCopy {
+            buffer_offset: 0,
+            buffer_row_length: 0,
+            buffer_image_height: 0,
+            image_subresource: vk::ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                mip_level: 0,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+            image_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
+            image_extent: self.extent,
+        };
+        let barrier1;
+        let barrier2;
+        if !barriers.is_none() {
+            [barrier1, barrier2] = barriers.unwrap();
+        } else {
+            barrier1 = vk::ImageMemoryBarrier {
+                old_layout: vk::ImageLayout::UNDEFINED,
+                new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                image: self.image,
+                subresource_range: vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    level_count: 1,
+                    layer_count: 1,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            barrier2 = vk::ImageMemoryBarrier {
+                old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                image: self.image,
+                subresource_range: vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    level_count: 1,
+                    layer_count: 1,
+                    ..Default::default()
+                },
+                ..Default::default()
+            }
+        }
+
+        cmd.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT, None)?;
+        // Копирование из staging buffer в атлас. это должно быть один раз
+        unsafe {
+            cmd.pipeline_barrier(
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(), &[], &[], &[barrier1]
+            );
+
+            // копирование шрифтов 
+            cmd.copy_buffer_to_image(
+                staging_buffer.buffer,
+                self.image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &[copy_region]
+            );
+
+            cmd.pipeline_barrier(
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(), &[], &[], &[barrier2]
+            );
+        }
+        cmd.end()?;
+
+        let fence = fence;
+
+        let submit_info = vk::SubmitInfo {
+            // wait_semaphore_count: 1,
+            // p_wait_semaphores: &image_available.semaphore,
+            // p_wait_dst_stage_mask: wait_stages.as_ptr(),
+            command_buffer_count: 1,
+            p_command_buffers: &cmd._buffer,
+            // signal_semaphore_count: 1,
+            // p_signal_semaphores: &render_finished.semaphore,
+            ..Default::default()
+        };
+        unsafe {
+            app.core._logical_device.reset_fences(&[fence.fence]).map_err(|_| "Err upload_cmd::reset_fences")?;
+        }
+        app.core.queue_submit(&[submit_info], fence.fence)?;
+        unsafe {
+            app.core._logical_device.wait_for_fences(&[fence.fence], true, u64::MAX).map_err(|_| "Err upload_cmd::wait_for_fences")?;
+        }
+
+        Ok(())
+    }
 }
 
 impl Drop for VulkanImage {
@@ -50,7 +165,7 @@ impl<'a> VulkanImageBuilder<'a> {
             core,
             create_info: vk::ImageCreateInfo {
                 image_type: vk::ImageType::TYPE_2D,
-                format: vk::Format::B8G8R8A8_UNORM,
+                format: vk::Format::R8G8B8A8_UNORM,
                 extent: vk::Extent3D {
                     width: 1,
                     height: 1,
