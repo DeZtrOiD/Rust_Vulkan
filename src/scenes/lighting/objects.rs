@@ -1,5 +1,5 @@
 
-use crate::vulkan_wr::types::{figures::{make_cube, make_plane, make_stub_rgba}, matrix::Matrix, model::{MaterialUBO, Mesh, MeshGPU, Model, SubMesh, Transform, TransformUBO}};
+use crate::{scenes::lighting::uniform::LightsSSBO, vulkan_wr::types::{figures::{make_cube, make_plane, make_stub_rgba}, matrix::Matrix, model::{MaterialUBO, Mesh, MeshGPU, Model, SubMesh, Transform, TransformUBO}}};
 
 use super::super::super::vulkan_wr::{
     app::VulkanApp,
@@ -48,6 +48,7 @@ pub struct LightObject {
     pub model_set_layout: Vec<VulkanDescriptorSetLayout>,
 
     pub uniform_buffers: Vec<VulkanBuffer>,
+    pub ssbo_light_buffer: Vec<VulkanBuffer>,
     pub descriptor_sets: Vec<VulkanDescriptorSet>,
     pub material_sets: Vec<VulkanDescriptorSet>,
     pub model_sets: Vec<VulkanDescriptorSet>,
@@ -66,8 +67,8 @@ impl<'a> InitObject<InitFrameResources<'a>> for LightObject {
     let path_to_obj_str = path_to_obj.to_str().unwrap();
     // загружаем модель через tobj
     let mut model = Model::try_new(path_to_obj_str)?;
-    model.transform.rotation = VulkanVector::new([PI/2.0, 0.0, 0.0]);
-    model.transform.position = VulkanVector::new([0.0, 0.0, 1.0]);
+    model.transform.rotation = VulkanVector::new([0.0 * PI, 0.0 * PI, 1.0 * PI]);
+    model.transform.position = VulkanVector::new([0.0, -1.0, 0.0]);
 
     let mut gpu_meshes = Vec::new();
     let mut material_map: HashMap<String, String> = HashMap::new();
@@ -111,14 +112,22 @@ impl<'a> InitObject<InitFrameResources<'a>> for LightObject {
     gpu_meshes.append(&mut tmp);
     let mut model = Model {
         meshes: vec![make_plane([1.0,0.0,0.0])],
-        transform: Transform{ scale: VulkanVector::new([10.0,10.0,1.0]) ,..Default::default()},
-        albedo_color: VulkanVector::new([1.0,1.0,1.0]),
+        transform: Transform{
+            scale: VulkanVector::new([10.0,10.0,1.0]),
+            rotation: VulkanVector::new([0.5* PI, 0.0* PI, 0.0* PI]),
+            position: VulkanVector::new([0.0, 0.0, 0.0])},
     };
+    model.meshes[0].submeshes[0].material.as_mut().ok_or("Material err")?.specular = Some([1.0, 1.0, 1.0]);
+
     gpu_meshes.append(&mut model.to_gpu_meshes(app, resources, sampler_set_layout.as_slice(), alignment)?);
     let mut model = Model {
         meshes: vec![make_cube(None)],
-        transform: Transform{ position: VulkanVector::new([0.0,0.0,0.5001]),scale: VulkanVector::new([2.0, 2.0, 0.5]),..Default::default()},
-        albedo_color: VulkanVector::new([1.0,1.0,1.0]),
+        transform: Transform{
+            position: VulkanVector::new([0.0, -0.5001, 0.0]),
+            scale: VulkanVector::new([2.0, 2.0, 0.5]),
+            rotation: VulkanVector::new([0.5* PI, 0.0* PI, 0.0* PI]),
+            ..Default::default()
+        },
     };
     gpu_meshes.append(&mut model.to_gpu_meshes(app, resources, sampler_set_layout.as_slice(), alignment)?);
 
@@ -148,6 +157,14 @@ impl<'a> InitObject<InitFrameResources<'a>> for LightObject {
             descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
             descriptor_count: 1, //количество буферов
             stage_flags: vk::ShaderStageFlags::VERTEX, // где доступен
+            ..Default::default()
+        }
+        ,
+        vk::DescriptorSetLayoutBinding {
+            binding: 1,
+            descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+            descriptor_count: 1, //количество буферов
+            stage_flags: vk::ShaderStageFlags::FRAGMENT, // где доступен
             ..Default::default()
         }
     ];
@@ -262,6 +279,20 @@ impl<'a> InitObject<InitFrameResources<'a>> for LightObject {
         uniform_buffers.push(buf);
     }
 
+    // shader storage buffer object (SSBO) for lights
+    let mut ssbo_buffers = vec![];
+    for _ in 0..app.image_count {
+        let buf = VulkanBuffer::try_new(
+            &app.core,
+            size_of::<LightsSSBO>() as vk::DeviceSize,
+            vk::BufferUsageFlags::STORAGE_BUFFER,
+            vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+            None, None, None, None
+        )?;
+        ssbo_buffers.push(buf);
+    }
+
+
     // 9. Descriptor sets
     let mut descriptor_sets = vec![];
     for _ in 0..app.image_count {  // сеты под юниформы
@@ -291,6 +322,28 @@ impl<'a> InitObject<InitFrameResources<'a>> for LightObject {
         writes.as_ref(),
         &[]
     );
+
+    // SSBO
+    let mut buffer_infos = Vec::new();
+    let mut writes = Vec::new();
+    for i in 0..app.image_count as usize {
+        let (write, buf_info) = descriptor_sets[i].write_buffer(
+            1,  // binding = 1
+            ssbo_buffers[i].buffer,  // дескриптор буфера
+            0,  // смещение в нем
+            vk::WHOLE_SIZE,  // конец необходимой части
+            vk::DescriptorType::STORAGE_BUFFER,
+        );
+        buffer_infos.push(buf_info);
+        writes.push(write);
+        writes[i].p_buffer_info = &buffer_infos[i];
+    }
+
+    app.descriptor_pool.update_descriptor_sets(
+        writes.as_ref(),
+        &[]
+    );
+
 
     let mut material_sets = vec![];
     let mut model_sets = vec![];
@@ -346,6 +399,7 @@ impl<'a> InitObject<InitFrameResources<'a>> for LightObject {
         material_sets: material_sets,
         model_set_layout: model_set_layout,
         model_sets: model_sets,
+        ssbo_light_buffer: ssbo_buffers,
     })
     }
 }
@@ -415,7 +469,7 @@ impl<'a> RenderObject<RenderFrameResources<'a>> for LightObject {
                 let aligned_size = ((std::mem::size_of::<TransformUBO>() as u64 + alignment - 1) / alignment) * alignment;
                 let mfr_offset = aligned_size as u32 * current_frame as u32; //si
                 cmd.bind_descriptor_sets(vk::PipelineBindPoint::GRAPHICS, self.pipeline_layout.layout, 3, &[self.model_sets[mi].set], &[mfr_offset]);
-
+                
                 for (si, sm) in gpu_mesh.submeshes.iter().enumerate() {
                     let ubo_ms = &self.material_sets[mi];
                     // 2) bind texture set (set = 1)

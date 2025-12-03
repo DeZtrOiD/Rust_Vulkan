@@ -142,6 +142,7 @@ impl VulkanCoreBuilder {
             requested_device_extensions: vec![ash::khr::swapchain::NAME.to_string_lossy().into_owned()],
             requested_device_features: vk::PhysicalDeviceFeatures {
                 sampler_anisotropy: 1,
+                fragment_stores_and_atomics: 1,
                 ..Default::default()
             },
 

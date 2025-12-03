@@ -39,6 +39,7 @@ pub struct SubMesh {
 }
 
 #[derive(Clone, Copy)]
+/// P * R * S * v
 pub struct Transform {
     pub position: VulkanVector<3>,
     pub rotation: VulkanVector<3>,
@@ -46,6 +47,7 @@ pub struct Transform {
 }
 
 impl Transform {
+    /// P * R * S * v
     pub fn to_matrix(&self) -> Matrix<4, 4> {
         Matrix::translate_vec(&self.position) * Matrix::rotation_vec(&self.rotation) * Matrix::scale_vec(&self.scale)
     }
@@ -55,23 +57,36 @@ impl Transform {
 #[derive(Clone, Copy)]
 pub struct TransformUBO {
     model: [[f32; 4]; 4],
+    normal: [[f32; 4]; 4],
 }
 
 
 pub struct Model {
     pub meshes: Vec<Mesh>,
     pub transform: Transform,
-    pub albedo_color: VulkanVector<3>,
+    // pub albedo_color: VulkanVector<3>,
 }
 
 #[repr(C)] // без компилятор может поменять порядок
 #[derive(Clone, Copy, Debug)]
-pub struct MaterialUBO {
-    pub ambient: [f32; 4],   // .w свободен
+pub struct MaterialUBO {  // Выровнять надо каждый до vec4
+    pub ambient: [f32; 4],  // .w свободен
     pub diffuse: [f32; 4],
     pub specular: [f32; 4],
-    pub extra: [f32; 4],     // extra[0] = shininess, остальные — padding
+    pub extra: [f32; 4],  // extra[0] = shininess, остальные — padding
 }
+
+impl Default for MaterialUBO {
+    fn default() -> Self {
+        Self {
+            ambient: [1.0, 1.0, 1.0, 1.0],
+            diffuse: [1.0, 1.0, 1.0, 1.0],
+            specular: [1.0, 1.0, 1.0, 1.0],
+            extra: [1.0, 1.0, 1.0, 1.0],
+        }
+    }
+}
+
 
 impl Model {
     pub fn try_new(path: &str) -> Result<Self, &'static str> {
@@ -160,7 +175,7 @@ impl Model {
         Ok(Model {
             meshes,
             transform: Transform::default(),
-            albedo_color: VulkanVector::new([1.0; 3]),
+            // albedo_color: VulkanVector::new([1.0; 3]),
         })
     }
 
@@ -209,15 +224,15 @@ impl Model {
             for (i, sm) in mesh.submeshes.iter_mut().enumerate() {
                 sm.texture_id = i;
                 let texture = match &sm.material {
-                    None => TextureGPU::make_white(app, resources, sampler_set_layout, &[255,255,255,255])?,
+                    None => TextureGPU::make_white(app, resources, sampler_set_layout, &[255,255,255,0])?,
                     Some(mat) => match &mat.diffuse_texture {
                         Some(path) => TextureGPU::load_texture(app, resources, path.clone(), sampler_set_layout)?,
-                        None => TextureGPU::make_white(app, resources, sampler_set_layout, &[255,255,255,255])?,
+                        None => TextureGPU::make_white(app, resources, sampler_set_layout, &[255,255,255,0])?,
                     }
                 };
 
                 let mat = sm.material.as_ref();
-                let ambient = mat.and_then(|m| m.ambient).unwrap_or([1.0; 3]);
+                let ambient = mat.and_then(|m| m.ambient).unwrap_or([0.1; 3]);
                 let diffuse = mat.and_then(|m| m.diffuse).unwrap_or([1.0; 3]);
                 let specular = mat.and_then(|m| m.specular).unwrap_or([1.0; 3]);
                 let shininess = mat.and_then(|m| m.shininess).unwrap_or(32.0);
@@ -227,6 +242,7 @@ impl Model {
                     diffuse: [diffuse[0], diffuse[1], diffuse[2], 0.0],
                     specular: [specular[0], specular[1], specular[2], 0.0],
                     extra: [shininess, 0.0, 0.0, 0.0],
+                    ..Default::default()
                 };
 
                 unsafe { mat_buf.mem_copy(&[material_data], Some(offset), None, None)?; }
@@ -241,8 +257,10 @@ impl Model {
                 vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
                 None, None, None, None
             )?;
+            let tmp = self.transform.to_matrix();
             let transf_data = TransformUBO{
-                model: self.transform.to_matrix().transpose().data,
+                model: tmp.transpose().data,
+                normal: (tmp.inverse())?.data  // transpose().transpose().
             };
             unsafe { transf_ubo.mem_copy(&[transf_data], None, None, None)?; }
             unsafe { transf_ubo.mem_copy(&[transf_data], Some(256), None, None)?; }
@@ -289,7 +307,7 @@ impl Default for Model {
         Model {
             meshes: vec![],
             transform: Transform::default(),
-            albedo_color: VulkanVector::default(),
+            // albedo_color: VulkanVector::default(),
         }
     }
 }

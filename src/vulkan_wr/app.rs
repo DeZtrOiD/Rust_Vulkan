@@ -69,6 +69,10 @@ impl VulkanApp {
                 ty: vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC,
                 descriptor_count: image_count * 200
             },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: image_count * 200
+            },
         ];
 
         let max_sets = image_count * 200;

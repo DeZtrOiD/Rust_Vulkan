@@ -1,6 +1,7 @@
 use crate::vulkan_wr::types::model::Transform;
 
 use super::{model::{Mesh, SubMesh}, vertex::VulkanVertex, vector::VulkanVector};
+use tobj::Material;
 
 /// Generate a square/plane
 /// Center at (0,0,0), size - 2.0, UV for a square texture
@@ -19,7 +20,7 @@ pub fn make_plane(color: [f32;3]) -> Mesh {
     let submesh = SubMesh {
         index_offset: 0,
         index_count: indices.len(),
-        material: None,
+        material: Some(Material{..Default::default()}),
         texture_id: 0,
     };
 
@@ -72,7 +73,7 @@ pub fn make_cube(face_colors: Option<[[f32;3];6]>) -> Mesh {
     let submesh = SubMesh {
         index_offset: 0,
         index_count: indices.len(),
-        material: None,
+        material: Some(Material{..Default::default()}),
         texture_id: 0,
     };
 

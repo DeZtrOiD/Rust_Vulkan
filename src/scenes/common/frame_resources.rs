@@ -33,7 +33,7 @@ pub struct Camera {
 impl Default for Camera {
     fn default() -> Self {
         Self {
-            pos: VulkanVector { data: [0.0; 3] },
+            pos: VulkanVector { data: [0.0, -4.0, 2.0] },
             up: VulkanVector { data: [0.0; 3] },
             front: VulkanVector { data: [0.0; 3] },
             yaw: 0.0, pitch: 0.0,
@@ -152,12 +152,7 @@ impl<R: ImguiResources + Default> SceneResources for FrameResources<R> {
             
             start_time: std::time::Instant::now(),
             vec_objects: vec![],
-            camera: Camera {
-                pos: VulkanVector{data: [0.0, 0.0, 3.0]},
-                up: VulkanVector{data: [0.0, 1.0, 0.0]},
-                front: VulkanVector{data: [0.0, 0.0, 0.0]},
-                ..Default::default()
-            }
+            camera: Camera {..Default::default()}
         })
     }
 

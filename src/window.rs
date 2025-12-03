@@ -260,12 +260,15 @@ impl Window {
         io.key_alt = self._window.get_key( glfw::Key::LeftAlt ) == glfw::Action::Press;
         io.key_shift = self._window.get_key( glfw::Key::LeftShift ) == glfw::Action::Press;
         io.key_super = self._window.get_key( glfw::Key::LeftSuper ) == glfw::Action::Press;
+        // if self._window.get_key( glfw::Key::LeftControl ) == glfw::Action::Press {
+        //     io.key_ctrl = !io.key_ctrl;
+        // }
         io.key_ctrl = self._window.get_key( glfw::Key::LeftControl ) == glfw::Action::Press;
 
         io.mouse_down[0] = self._window.get_mouse_button( glfw::MouseButtonLeft ) == glfw::Action::Press;
         io.mouse_down[1] = self._window.get_mouse_button( glfw::MouseButtonRight ) == glfw::Action::Press;
 
-        if io.key_ctrl && self.mouse_captured {
+        if io.key_alt && self.mouse_captured {
             // in imgui
             let cx = (self._width as f64) / 2.0;
             let cy = (self._height as f64) / 2.0;
@@ -275,7 +278,7 @@ impl Window {
             let (mx, my) = self._window.get_cursor_pos();
             io.mouse_pos = [mx as f32, my as f32];
             io.mouse_delta = [0.0, 0.0];
-        } else if (!io.key_ctrl) && (!self.mouse_captured) {
+        } else if (!io.key_alt) && (!self.mouse_captured) {
             // in scene
             self._window.set_cursor_mode(glfw::CursorMode::Disabled);
             self.mouse_captured = true;
