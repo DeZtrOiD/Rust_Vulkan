@@ -13,7 +13,7 @@ image = "0.25.9"
 tobj = "4.0.3"
 
 [features]
-default = ["scene2"]
+default = ["scene3"]
 scene1 = []
 scene2 = []
 scene3 = []

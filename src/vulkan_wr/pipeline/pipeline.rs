@@ -65,6 +65,16 @@ pub struct VulkanPipelineBuilder<'a> {
     pipeline_layout: vk::PipelineLayout,
 
     p_dynamic_state: vk::PipelineDynamicStateCreateInfo<'a>,
+
+    // =================== ДОБАВЛЕНО ДЛЯ DYNAMIC RENDERING ===================
+    /// Форматы color attachments для dynamic rendering
+    color_attachment_formats: Vec<vk::Format>,
+    /// Формат depth attachment для dynamic rendering
+    depth_attachment_format: Option<vk::Format>,
+    /// Формат stencil attachment для dynamic rendering
+    stencil_attachment_format: Option<vk::Format>,
+    /// Флаг использования dynamic rendering
+    use_dynamic_rendering: bool,
 }
 
 impl<'a> VulkanPipelineBuilder<'a> {
@@ -149,8 +159,52 @@ impl<'a> VulkanPipelineBuilder<'a> {
             pipeline_layout: layout,
             tessellation: tessellation,
             p_dynamic_state: vk::PipelineDynamicStateCreateInfo::default(),
+
+            color_attachment_formats: Vec::new(),
+            depth_attachment_format: None,
+            stencil_attachment_format: None,
+            use_dynamic_rendering: false,
+
         }
     }
+
+    pub fn new_dynamic(device: &'a Device, layout: vk::PipelineLayout) -> Self {
+        let mut builder = Self::new(device, vk::RenderPass::null(), layout);
+        builder.use_dynamic_rendering = true;
+        builder
+    }
+    /// Установка форматов color attachments для dynamic rendering
+    pub fn with_color_attachment_formats(mut self, formats: Vec<vk::Format>) -> Self {
+        self.color_attachment_formats = formats;
+        self
+    }
+    /// Добавление одного color attachment формата для dynamic rendering
+    pub fn add_color_attachment_format(mut self, format: vk::Format) -> Self {
+        self.color_attachment_formats.push(format);
+        self
+    }
+    /// Установка формата depth attachment для dynamic rendering
+    pub fn with_depth_attachment_format(mut self, format: vk::Format) -> Self {
+        self.depth_attachment_format = Some(format);
+        self
+    }
+    /// Установка формата stencil attachment для dynamic rendering
+    pub fn with_stencil_attachment_format(mut self, format: vk::Format) -> Self {
+        self.stencil_attachment_format = Some(format);
+        self
+    }
+    /// Установка одного формата для depth и stencil attachment для dynamic rendering
+    pub fn with_depth_stencil_attachment_format(mut self, format: vk::Format) -> Self {
+        self.depth_attachment_format = Some(format);
+        self.stencil_attachment_format = Some(format);
+        self
+    }
+    /// Включение/выключение dynamic rendering
+    pub fn use_dynamic_rendering(mut self, enable: bool) -> Self {
+        self.use_dynamic_rendering = enable;
+        self
+    }
+
 
     pub fn with_shader_stages(mut self, stages: Vec<vk::PipelineShaderStageCreateInfo<'a>>) -> Self {
         self.shader_stages = stages;
@@ -219,10 +273,27 @@ impl<'a> VulkanPipelineBuilder<'a> {
     }
 
     pub fn build(mut self) -> Result<VulkanPipeline, &'static str> {
-
         self.color_blend.p_attachments = &self.color_blend_attachment;
 
-        let create_info = vk::GraphicsPipelineCreateInfo {
+        let mut pipeline_rendering_create_info = if self.use_dynamic_rendering {
+            Some(vk::PipelineRenderingCreateInfo {
+                s_type: vk::StructureType::PIPELINE_RENDERING_CREATE_INFO,
+                p_next: std::ptr::null(),
+                color_attachment_count: self.color_attachment_formats.len() as u32,
+                p_color_attachment_formats: if self.color_attachment_formats.is_empty() {
+                    std::ptr::null()
+                } else {
+                    self.color_attachment_formats.as_ptr()
+                },
+                depth_attachment_format: self.depth_attachment_format.unwrap_or(vk::Format::UNDEFINED),
+                stencil_attachment_format: self.stencil_attachment_format.unwrap_or(vk::Format::UNDEFINED),
+                ..Default::default()
+            })
+        } else {
+            None
+        };
+
+        let mut create_info = vk::GraphicsPipelineCreateInfo {
             stage_count: self.shader_stages.len() as u32,
             p_stages: self.shader_stages.as_ptr(),
             p_vertex_input_state: &self.vertex_input,
@@ -241,6 +312,11 @@ impl<'a> VulkanPipelineBuilder<'a> {
             p_dynamic_state: &self.p_dynamic_state,
             ..Default::default()
         };
+
+        if let Some(ref mut rendering_info) = pipeline_rendering_create_info {
+            create_info.p_next = rendering_info as *mut _ as *const _;
+        }
+
 
         let pipelines = unsafe {
             self.device

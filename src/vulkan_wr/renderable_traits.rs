@@ -8,6 +8,8 @@ use super::{
     sync::fence::VulkanFence,
     framebuffer::VulkanFramebuffer,
 };
+use crate::vulkan_wr::image::image_view::VulkanImageView;
+use ash::vk;
 
 pub trait RenderObjectResources {}
 pub trait InitObjectResources {}
@@ -53,15 +55,19 @@ impl<'a> Default for InitFrameResources<'a> {
 }
 
 pub struct RenderFrameResources<'a> {
-        pub render_pass: Option<&'a VulkanRenderPass>,
-        pub framebuffer: Option<&'a VulkanFramebuffer>,
+    pub render_pass: Option<&'a VulkanRenderPass>,
+    pub framebuffer: Option<&'a VulkanFramebuffer>,
+    pub color_attachment: Option<&'a VulkanImageView>,
+    pub depth_attachment: Option<&'a VulkanImageView>,
+    pub render_area: Option<vk::Rect2D>,
+    pub clear_values: Vec<vk::ClearValue>,
 }
 
 impl<'a> RenderObjectResources for RenderFrameResources<'a>{}
 
 impl<'a> Default for RenderFrameResources<'a> {
     fn default() -> Self {
-        Self { render_pass: None, framebuffer: None }
+        Self { render_pass: None, framebuffer: None, color_attachment: None, depth_attachment: None, render_area: None, clear_values: vec![] }
     }
 }
 

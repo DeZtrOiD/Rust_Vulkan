@@ -5,7 +5,7 @@ use crate::{scenes::lighting::uniform::{DirectionalLight, LightsSSBO, PointLight
 
 use super::{
     uniform::Uniforms,
-    objects::{UpdateLightObject, LightObject},
+    objects::{UpdateShadowsObject, ShadowsObject},
 };
 use super::super::super::vulkan_wr::{
     app::VulkanApp,
@@ -13,12 +13,12 @@ use super::super::super::vulkan_wr::{
     ImGui_wr::{UpdateImguiResources, VulkanImgui},
     renderable_traits::UpdateObjectResources,
 };
-use super::frame_resources::{ImguiFrameResourcesLight};
+use super::frame_resources::{ImguiFrameResourcesShadows};
 use super::super::super::window::{KEY_CODES, key_to_index};
-use super::super::common::frame_resources::{FrameResources, Camera};
+use super::super::dynamic::frame_resources::{FrameResources, Camera};
 use crate::vulkan_wr::ImGui_wr::ImguiResources;
 
-pub struct ResourcesLight {
+pub struct ResourcesShadows {
     mvp: Matrix<4, 4>,
     // resources: &'a FrameResources,
     animation_time: f32,  // self.aimation_time
@@ -43,7 +43,7 @@ pub struct ResourcesLight {
     time: f32,
 }
 
-impl<R: ImguiResources + Default> UpdateObjectResources<FrameResources<R>> for ResourcesLight {
+impl<R: ImguiResources + Default> UpdateObjectResources<FrameResources<R>> for ResourcesShadows {
     fn read(&mut self, arg: &mut FrameResources<R>) -> Result<(), &'static str> {
         self.camera = arg.camera;
         Ok(())
@@ -54,8 +54,8 @@ impl<R: ImguiResources + Default> UpdateObjectResources<FrameResources<R>> for R
     }
 }
 
-impl UpdateLightObject for ResourcesLight {
-    fn update_light(&mut self, obj: &mut LightObject, app: & mut VulkanApp) -> Result<(), &'static str> {
+impl UpdateShadowsObject for ResourcesShadows {
+    fn update_shadows(&mut self, obj: &mut ShadowsObject, app: & mut VulkanApp) -> Result<(), &'static str> {
         const SPEED: f32 = 0.2;
         const SENSITIVITY: f32 = 0.002;
 
@@ -204,9 +204,9 @@ impl UpdateLightObject for ResourcesLight {
     }
 }
 
-impl UpdateImguiResources<ImguiFrameResourcesLight> for ResourcesLight {
+impl UpdateImguiResources<ImguiFrameResourcesShadows> for ResourcesShadows {
     fn update_imgui(&mut self,
-        imgui: &mut VulkanImgui<ImguiFrameResourcesLight>,
+        imgui: &mut VulkanImgui<ImguiFrameResourcesShadows>,
         app: &mut VulkanApp
     ) -> Result<(), &'static str> {
 
@@ -240,7 +240,7 @@ impl UpdateImguiResources<ImguiFrameResourcesLight> for ResourcesLight {
     }
 }
 
-impl Default for ResourcesLight {
+impl Default for ResourcesShadows {
     fn default() -> Self {
         Self {
             mvp: Matrix::identity(),

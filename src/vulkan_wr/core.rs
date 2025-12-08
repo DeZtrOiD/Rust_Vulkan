@@ -22,6 +22,7 @@ pub struct VulkanCore {
     pub _logical_device: Device,
     pub _graphics_queue: vk::Queue,
     pub _graphics_queue_index: u32,
+    pub min_uniform_buffer_offset_alignment: u64,
 
     #[cfg(debug_assertions)]
     _debug_messenger: vk::DebugUtilsMessengerEXT,
@@ -119,19 +120,22 @@ pub struct VulkanCoreBuilder {
     // Device: extensions и features
     requested_device_extensions: Vec<String>,
     requested_device_features: vk::PhysicalDeviceFeatures,
+    min_uniform_buffer_offset_alignment: u64,
 
     // Debug
     enable_validation: bool,
+
+
 }
 
 impl VulkanCoreBuilder {
     pub fn new(app_name: &str) -> Self {
         Self {
             app_name: app_name.to_string(),
-            app_version: vk::make_api_version(0, 1, 0, 0),
+            app_version: vk::make_api_version(0, 1, 2, 0),
             engine_name: None,
             engine_version: 0,
-            api_version: vk::make_api_version(0, 1, 2, 0),
+            api_version: vk::make_api_version(0, 1, 4, 0),
 
             requested_instance_layers: vec![],
             requested_instance_extensions: vec![],
@@ -139,7 +143,10 @@ impl VulkanCoreBuilder {
             requested_queue_family_flags: vk::QueueFlags::GRAPHICS,
             requested_queue_priorities: vec![1.0],
 
-            requested_device_extensions: vec![ash::khr::swapchain::NAME.to_string_lossy().into_owned()],
+            requested_device_extensions: vec![
+                ash::khr::swapchain::NAME.to_string_lossy().into_owned(),
+                ash::khr::dynamic_rendering::NAME.to_string_lossy().into_owned()
+            ],
             requested_device_features: vk::PhysicalDeviceFeatures {
                 sampler_anisotropy: 1,
                 fragment_stores_and_atomics: 1,
@@ -147,6 +154,7 @@ impl VulkanCoreBuilder {
             },
 
             enable_validation: cfg!(debug_assertions),
+            min_uniform_buffer_offset_alignment: 256,
         }
     }
 
@@ -286,7 +294,7 @@ impl VulkanCoreBuilder {
 
         // physical device & queue index
         let surface_device = khr::surface::Instance::new(&entry, &instance);
-        let (physical_device, q_family_idx) = Self::pick_physical_device(
+        let (physical_device, q_family_idx, mem_limit) = Self::pick_physical_device(
             self.requested_device_features,
             &instance,
             &surface_device,
@@ -311,9 +319,19 @@ impl VulkanCoreBuilder {
             .map(|s| CString::new(s).unwrap())
             .collect();
         let device_ext_ptrs: Vec<*const i8> = device_ext_cstrings.iter().map(|c| c.as_ptr()).collect();
+        let mut dynamic_rendering_features = vk::PhysicalDeviceDynamicRenderingFeatures::default().dynamic_rendering(true);
+
+        let mut synchronization2_features = vk::PhysicalDeviceSynchronization2Features {
+            s_type: vk::StructureType::PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
+            p_next: &mut dynamic_rendering_features as *mut _ as *mut _,
+            synchronization2: vk::TRUE,
+            ..Default::default()
+        };
+
 
         // device create info
         let device_info = vk::DeviceCreateInfo {
+            p_next: &mut synchronization2_features as *mut _ as *const _, // ← добавили pNext
             queue_create_info_count: 1,
             p_queue_create_infos: &queue_create_info,
             p_enabled_features: &self.requested_device_features,
@@ -336,6 +354,7 @@ impl VulkanCoreBuilder {
             _graphics_queue_index: q_family_idx,
             #[cfg(debug_assertions)]
             _debug_messenger: debug_messenger.unwrap_or_else(|| vk::DebugUtilsMessengerEXT::null()),
+            min_uniform_buffer_offset_alignment: mem_limit,
         })
     }
 
@@ -346,35 +365,36 @@ impl VulkanCoreBuilder {
         surface_device: &khr::surface::Instance,
         surface: vk::SurfaceKHR,
         flags: vk::QueueFlags,
-    ) -> CoreVkResult<(vk::PhysicalDevice, u32)> {
+    ) -> CoreVkResult<(vk::PhysicalDevice, u32, u64)> {
         let devices = unsafe { instance.enumerate_physical_devices().map_err(|_| "Failed to enumerate physical devices")? };
         if devices.is_empty() { return Err("No physical devices found"); }
 
         let mut candidates = Vec::new();
         for pd in devices {
             let props = unsafe { instance.get_physical_device_properties(pd) };
-            print!("prop: \n{:?}={}\n", props.device_name_as_c_str(), props.limits.min_uniform_buffer_offset_alignment);
+            let mem_limit = props.limits.min_uniform_buffer_offset_alignment;
+            print!("prop: \n{:?}={}\n", props.device_name_as_c_str(), mem_limit);
             let queues_family = unsafe { instance.get_physical_device_queue_family_properties(pd) };
             let features = unsafe { instance.get_physical_device_features(pd) };
-            if features.sampler_anisotropy == 0 { continue; }
+            if features.sampler_anisotropy == 0 || features.fragment_stores_and_atomics == 0 { continue; }
     
             // у девайся должна быть подходящая очередь, иначе зачем он такой?
             for (i, q) in queues_family.iter().enumerate() {
                 let supports_graphics = q.queue_flags.contains(flags);
                 let supports_surface = unsafe { surface_device.get_physical_device_surface_support(pd, i as u32, surface) }.unwrap_or(false);
                 if supports_graphics && supports_surface {
-                    candidates.push((pd, i as u32, props.device_type));
+                    candidates.push((pd, i as u32, props.device_type, mem_limit));
                     break;
                 }
             }
         }
         // хочется выбрать gpu дискретную
-        candidates.into_iter().max_by_key(|(_, _, ty)| match *ty {
+        candidates.into_iter().max_by_key(|(_, _, ty, _)| match *ty {
             vk::PhysicalDeviceType::DISCRETE_GPU => 3,
             vk::PhysicalDeviceType::INTEGRATED_GPU => 2,
             vk::PhysicalDeviceType::VIRTUAL_GPU => 1,
             _ => 0,
-        }).map(|(pd, qf, _)| (pd, qf)).ok_or("No suitable GPU found")
+        }).map(|(pd, qf, _, mem)| (pd, qf, mem)).ok_or("No suitable GPU found")
     }
 
     #[cfg(debug_assertions)]

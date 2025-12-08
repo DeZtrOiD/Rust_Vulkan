@@ -10,6 +10,7 @@ mod scenes;
 
 use vulkan_wr::app::{VulkanApp};
 
+#[cfg(not(feature = "scene3"))]
 use scenes::common::{
     frame_resources::FrameResources,
     init::init_app,
@@ -17,6 +18,16 @@ use scenes::common::{
     shutdown::shutdown_app,
     update::update_app,
 };
+
+#[cfg(feature = "scene3")]
+use scenes::dynamic::{
+    frame_resources::FrameResources,
+    init::init_app,
+    render_frame::render_frame_app,
+    shutdown::shutdown_app,
+    update::update_app,
+};
+
 
 #[cfg(feature = "scene1")]
 use scenes::sphere::{
@@ -28,6 +39,10 @@ use scenes::sphere::{
 use crate::scenes::lighting::frame_resources::ImguiFrameResourcesLight;
 #[cfg(feature = "scene2")]
 use crate::scenes::lighting::update::ResourcesLight;
+#[cfg(feature = "scene3")]
+use crate::scenes::shadows::frame_resources::ImguiFrameResourcesShadows;
+#[cfg(feature = "scene3")]
+use crate::scenes::shadows::update::ResourcesShadows;
 
 fn main() {
     let app_name = "RUST_POBEDA";
@@ -50,6 +65,12 @@ fn main() {
         image_count
     ).unwrap();
 
+    #[cfg(feature = "scene3")]
+    let mut frame_res = app.get_frame_resources::<FrameResources<ImguiFrameResourcesShadows>>
+    (
+        image_count
+    ).unwrap();
+
     app.init(init_app, &mut frame_res).unwrap();
 
     // Loop until the user closes the window
@@ -59,6 +80,8 @@ fn main() {
             update_app::<ImguiFrameResourcesSphere, ResourcesSphere>,
             #[cfg(feature = "scene2")]
             update_app::<ImguiFrameResourcesLight, ResourcesLight>,
+            #[cfg(feature = "scene3")]
+            update_app::<ImguiFrameResourcesShadows, ResourcesShadows>,
             &mut frame_res
         ).unwrap();
         app.render(render_frame_app, &mut frame_res).unwrap();

@@ -5,7 +5,7 @@ use super::super::super::vulkan_wr::{
     ImGui_wr::{ImguiResources},
 };
 
-pub struct ImguiFrameResourcesLight {
+pub struct ImguiFrameResourcesShadows {
 
     pub start_time: std::time::Instant,
     pub prev_time: std::time::Instant,
@@ -20,7 +20,7 @@ pub struct ImguiFrameResourcesLight {
     pub inner_cut_off: f32,
 }
 
-impl ImguiResources for ImguiFrameResourcesLight {
+impl ImguiResources for ImguiFrameResourcesShadows {
     fn render_ui(&mut self, ui: &mut imgui::Ui) {
         ui.window("Sphere Controls").build(|| {
             ui.text("Animation Controls:");
@@ -44,7 +44,7 @@ impl ImguiResources for ImguiFrameResourcesLight {
     }
 }
 
-impl Default for ImguiFrameResourcesLight {
+impl Default for ImguiFrameResourcesShadows {
     fn default() -> Self {
         let time = std::time::Instant::now();
         Self { 

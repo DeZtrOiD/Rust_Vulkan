@@ -36,7 +36,7 @@ pub struct VulkanApp {
 impl VulkanApp {
     pub fn try_new(window: Window, app_name: &str) -> AppVkResult<Self> {
         let vk_core = VulkanCoreBuilder::new(app_name)
-            .api_version(1, 2, 0)
+            .api_version(1, 4, 0)
             .enable_validation(cfg!(debug_assertions))
             .build(&window)?;
         let vk_swapchain = VulkanSwapchainBuilder::new(&vk_core)
@@ -47,7 +47,8 @@ impl VulkanApp {
         let cmd_pool = VulkanCommandPool::try_new(
             &vk_core._logical_device,
             vk_core._graphics_queue_index,
-            vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER
+            vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+            Some(&vk_core._instance)
         )?;
 
         let image_count = vk_swapchain.images.len() as u32;
@@ -158,6 +159,7 @@ impl VulkanApp {
         self.window.should_close()
     }
 
+    // #[cfg(any(feature = "scene1", feature = "scene2"))]
     pub fn recreate_swapchain(&mut self) -> AppVkResult<()> {
         self.device_wait_idle()?;
 
@@ -185,8 +187,32 @@ impl VulkanApp {
         Ok(())
     }
 
+    // #[cfg(feature = "scene3")]
+    // pub fn recreate_swapchain(&mut self) -> AppVkResult<()> {
+    //     self.device_wait_idle()?;
+    //     let (width, height) = self.window.get_width_height();
+    //     if width == 0 || height == 0 {
+    //         return Ok(());
+    //     }
+        
+    //     // Пересоздаем swapchain
+    //     let vk_swapchain = VulkanSwapchainBuilder::new(&self.core)
+    //         .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST)
+    //         .extent(vk::Extent2D { width, height })
+    //         .old_swapchain(self.swapchain.swapchain)
+    //         .build()?;
+        
+    //     self.swapchain = vk_swapchain;
+    //     self.image_count = self.swapchain.images.len() as u32;
+    //     Ok(())
+    // }
+
     pub fn get_swapchain_extent(&self) -> vk::Extent2D {
         self.swapchain.extent
+    }
+
+    pub fn get_min_ubo_alignment(&self) -> u64 {
+        return self.core.min_uniform_buffer_offset_alignment
     }
 
 }

@@ -20,7 +20,7 @@ pub struct TextureGPU {
 
 impl TextureGPU {
     pub fn load_texture(app: &mut VulkanApp, resources: &mut InitFrameResources, path: String, sampler_layout: &[VulkanDescriptorSetLayout]) -> Result<TextureGPU, &'static str> {
-        print!("\nPATH: {}\n", path);
+        // print!("\nPATH: {}\n", path);
         let rgba_data = image::open(&path)
             .map_err(|_| "image load failed")?
             .to_rgba8();

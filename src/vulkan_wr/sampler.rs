@@ -27,13 +27,15 @@ impl<'a> VulkanSamplerBuilder<'a> {
                 address_mode_u: vk::SamplerAddressMode::REPEAT,  // Поведение при выходе за пределы текстуры по оси U.
                 address_mode_v: vk::SamplerAddressMode::REPEAT,  // Поведение при выходе за пределы текстуры по оси V.
                 address_mode_w: vk::SamplerAddressMode::REPEAT,  // Поведение при выходе за пределы текстуры по оси W (для 3д текстур).            
-                mipmap_mode: vk::SamplerMipmapMode::LINEAR,
-                anisotropy_enable: vk::FALSE,
-                max_anisotropy: 1.0,
+                mipmap_mode: vk::SamplerMipmapMode::NEAREST,
+                anisotropy_enable: vk::TRUE,
+                max_anisotropy: 16.0,
                 border_color: vk::BorderColor::INT_OPAQUE_BLACK,
                 unnormalized_coordinates: vk::FALSE,
                 compare_enable: vk::FALSE,
                 compare_op: vk::CompareOp::ALWAYS,
+                min_lod: 0.0,
+                max_lod: vk::LOD_CLAMP_NONE,
                 ..Default::default()
             },
             device: device,

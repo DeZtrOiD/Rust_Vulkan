@@ -263,27 +263,56 @@ impl <'a, R: ImguiResources + Default> InitObject<InitFrameResources<'a>> for Vu
         )?;
 
         // 11.11. Создание пайплайна
-        let imgui_pipeline = VulkanPipelineBuilder::new(
-            &app.core._logical_device,
-            resources.render_pass.as_ref().ok_or("RENDERPASS Imgui is not initialized")?.render_pass,
-            imgui_pipeline_layout.layout
-        )
-        .with_shader_stages(imgui_shader_stages)
-        .with_vertex_input(imgui_vertex_input_info)
-        .with_viewport_state(imgui_viewport_state)
-        .with_rasterizer(imgui_rasterizer)
-        .with_multisampling(imgui_multisampling)
-        .with_depth_stencil(imgui_depth_stencil)
-        .with_color_blend(imgui_color_blend)
-        .with_dynamic_states(imgui_dynamic_state_info) // Добавляем метод для динамических состояний
-        .with_input_assembly(
-            vk::PipelineInputAssemblyStateCreateInfo {
-                topology: vk::PrimitiveTopology::TRIANGLE_LIST,
-                primitive_restart_enable: vk::FALSE,
-            ..Default::default()
-        })
-        .with_subpass(0)
-        .build()?;
+        let imgui_pipeline;
+        #[cfg(any(feature = "scene1", feature = "scene2"))] {
+            imgui_pipeline = VulkanPipelineBuilder::new(
+                &app.core._logical_device,
+                resources.render_pass.as_ref().ok_or("RENDERPASS Imgui is not initialized")?.render_pass,
+                imgui_pipeline_layout.layout
+            )
+            .with_shader_stages(imgui_shader_stages)
+            .with_vertex_input(imgui_vertex_input_info)
+            .with_viewport_state(imgui_viewport_state)
+            .with_rasterizer(imgui_rasterizer)
+            .with_multisampling(imgui_multisampling)
+            .with_depth_stencil(imgui_depth_stencil)
+            .with_color_blend(imgui_color_blend)
+            .with_dynamic_states(imgui_dynamic_state_info) // Добавляем метод для динамических состояний
+            .with_input_assembly(
+                vk::PipelineInputAssemblyStateCreateInfo {
+                    topology: vk::PrimitiveTopology::TRIANGLE_LIST,
+                    primitive_restart_enable: vk::FALSE,
+                ..Default::default()
+            })
+            .with_subpass(0)
+            .build()?;
+        }
+        #[cfg(feature = "scene3")] {
+            imgui_pipeline = VulkanPipelineBuilder::new_dynamic(
+                &app.core._logical_device,
+                imgui_pipeline_layout.layout
+            )
+            .with_color_attachment_formats(vec![app.swapchain.color_format])
+            .with_depth_attachment_format(app.swapchain.depth_format)
+            .with_shader_stages(imgui_shader_stages)
+            .with_vertex_input(imgui_vertex_input_info)
+            .with_viewport_state(imgui_viewport_state)
+            .with_rasterizer(imgui_rasterizer)
+            .with_multisampling(imgui_multisampling)
+            .with_depth_stencil(imgui_depth_stencil)
+            .with_color_blend(imgui_color_blend)
+            .with_dynamic_states(imgui_dynamic_state_info)
+            .with_input_assembly(
+                vk::PipelineInputAssemblyStateCreateInfo {
+                    topology: vk::PrimitiveTopology::TRIANGLE_LIST,
+                    primitive_restart_enable: vk::FALSE,
+                    ..Default::default()
+                }
+            )
+            .build()?;
+        }
+        
+
 
         // 12. Создание текстуры шрифта для ImGui
         let font_image = VulkanImageBuilder::new(&app.core)
@@ -397,6 +426,7 @@ impl <'a, R: ImguiResources + Default> InitObject<InitFrameResources<'a>> for Vu
         let fence = resources.fence.as_ref().ok_or("FENCE Imgui is not initialized")?;
         font_image.upload_from_slice(app, upload_cmd, fence, atlas.data, None)?;
 
+        // TODO: None
         let vec_cmd_secondary_imgui = app.command_pool.allocate_command_buffers(app.image_count, vk::CommandBufferLevel::SECONDARY)?;
 
         Ok(Self {
@@ -465,18 +495,41 @@ impl <'a, R: ImguiResources + Default> RenderObject<RenderFrameResources<'a>> fo
             let cmd_buf = &self.cmd_vec[app.frame_index as usize];
             // Перезапись secondary командного буфера для ImGui
             cmd_buf.reset(None)?;
-            
-            let inheritance_info = vk::CommandBufferInheritanceInfo {
+
+            let inheritance_info;
+            #[cfg(not(feature = "scene3"))] {
+            inheritance_info = vk::CommandBufferInheritanceInfo {
                 render_pass: resources.render_pass.as_ref().ok_or("Err imgui is not initialized")?.render_pass,
                 subpass: 0,
                 framebuffer: resources.framebuffer.as_ref().ok_or("Err imgui is not initialized")?.framebuffer,
                 ..Default::default()
             };
-            
             cmd_buf.begin(
                 vk::CommandBufferUsageFlags::RENDER_PASS_CONTINUE,
                 Some(&inheritance_info)
             )?;
+            }
+            #[cfg(feature = "scene3")]{
+            let color_format = vec![app.swapchain.color_format];
+
+            let mut inheritance_rendering_info = vk::CommandBufferInheritanceRenderingInfo::default()
+                .color_attachment_formats(color_format.as_slice())
+                .depth_attachment_format(app.swapchain.depth_format)
+                .stencil_attachment_format(vk::Format::UNDEFINED)
+                .rasterization_samples(vk::SampleCountFlags::TYPE_1)
+                .flags(vk::RenderingFlags::CONTENTS_SECONDARY_COMMAND_BUFFERS);
+
+            inheritance_info = vk::CommandBufferInheritanceInfo::default()
+                .render_pass(vk::RenderPass::null())
+                .subpass(0)
+                .framebuffer(vk::Framebuffer::null())
+                .push_next(&mut inheritance_rendering_info);
+
+            cmd_buf.begin(
+                vk::CommandBufferUsageFlags::RENDER_PASS_CONTINUE,
+                Some(&inheritance_info)
+            )?;
+            }
 
             if draw_data.draw_lists_count() == 0 {
                 cmd_buf.end()?;

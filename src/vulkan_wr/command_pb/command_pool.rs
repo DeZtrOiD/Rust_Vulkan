@@ -6,12 +6,14 @@
 
 
 use ash::{vk, Device};
-
+use ash::khr::dynamic_rendering;
+use ash::Instance;
 use super::command_buffer::VulkanCommandBuffer;
 
 pub struct VulkanCommandPool {
     _pool: vk::CommandPool,
     _log_device: Device,
+    dynamic_rendering_ext: Option<dynamic_rendering::Device>,
 }
 
 type CResult<T> = Result<T, &'static str>;
@@ -24,7 +26,7 @@ impl VulkanCommandPool {
     /// * * TRANSIENT_BIT - буферы живут недолго но весело
     /// * * RESET_COMMAND_BUFFER_BIT - позволяет reset buffer
     /// * * CREATE_PROTECTED_BIT - Creates "protected" command buffers which are stored in "protected" memory where Vulkan prevents unauthorized operations from accessing the memory
-    pub fn try_new(log_device: &Device, queue_index: u32, flags: vk::CommandPoolCreateFlags) -> CResult<Self> {
+    pub fn try_new(log_device: &Device, queue_index: u32, flags: vk::CommandPoolCreateFlags, instance: Option<&Instance>) -> CResult<Self> {
 
         let create_info = vk::CommandPoolCreateInfo{
             queue_family_index: queue_index,
@@ -34,10 +36,20 @@ impl VulkanCommandPool {
 
         let pool = unsafe{ log_device.create_command_pool(&create_info, None)
             .map_err(|_| "Failed to create command pool")? };
+        let dev_ext;
+        if instance.is_none() {
+            dev_ext = None;
+        } else {
+            dev_ext = Some(dynamic_rendering::Device::new(
+                instance.ok_or("An Instance must be provided in the command pool when khr::dynamic_rendering in use.")?,
+                log_device)
+            );
+        }
 
         Ok(Self {
             _pool: pool,
             _log_device: log_device.clone(),
+            dynamic_rendering_ext: dev_ext,
         })
     }
 
@@ -61,8 +73,9 @@ impl VulkanCommandPool {
 
         let buffers = raw_buffers.into_iter().map(|buffer| VulkanCommandBuffer {
                 _buffer: buffer,
-                _device: self._log_device.clone()
-            }
+                _device: self._log_device.clone(),
+                _dynamic_rendering: self.dynamic_rendering_ext.clone(),
+        }
         ).collect();
         Ok(buffers)
     }

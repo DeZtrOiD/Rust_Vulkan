@@ -49,6 +49,7 @@ pub fn render_frame_app<R: ImguiResources + Default>(app: & mut VulkanApp, resou
     let resss = RenderFrameResources{
             render_pass: Some(resources.render_pass.as_ref().unwrap()),
             framebuffer: Some(&resources.framebuffers[image_index as usize]),
+            ..Default::default()
     };
     for obj in &mut resources.vec_objects {
         obj.render(app, &resss)?;

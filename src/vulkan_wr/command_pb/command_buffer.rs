@@ -4,13 +4,14 @@
 // Desc: command buffer wrapper
 // #=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#
 
-
+use ash::khr::dynamic_rendering;
 use ash::{vk, Device};
 
 #[derive(Clone)]
 pub struct VulkanCommandBuffer {
     pub _buffer: vk::CommandBuffer,
     pub _device: Device,
+    pub _dynamic_rendering: Option<dynamic_rendering::Device>,
 }
 
 type CResult<T> = Result<T, &'static str>;
@@ -177,6 +178,25 @@ impl VulkanCommandBuffer {
             );
         }
     }
+
+    pub fn begin_dynamic_rendering(&self, rendering_info: &vk::RenderingInfo<'_>) -> Result<(), &'static str> {
+        let dev_ext = self._dynamic_rendering.as_ref().ok_or("")?;
+        unsafe {
+            dev_ext.cmd_begin_rendering(self._buffer, rendering_info);
+            // self._device.cmd_begin_rendering(self._buffer, rendering_info);
+        }
+        Ok(())
+    }
+
+    pub fn end_dynamic_rendering(&self) -> Result<(), &'static str> {
+        let dev_ext = self._dynamic_rendering.as_ref().ok_or("")?;
+        unsafe {
+            dev_ext.cmd_end_rendering(self._buffer);
+            // self._device.cmd_end_rendering(self._buffer);
+        }
+        Ok(())
+    }
+
 
     /// сбрасывает буфер 
     /// flags - указывает что делать с ресурсами буфера

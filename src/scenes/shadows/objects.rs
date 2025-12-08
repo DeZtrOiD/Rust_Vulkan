@@ -1,5 +1,5 @@
 
-use crate::{scenes::lighting::uniform::LightsSSBO, vulkan_wr::types::{figures::{make_cube, make_plane, make_stub_rgba}, matrix::Matrix, model::{MaterialUBO, Mesh, MeshGPU, Model, SubMesh, Transform, TransformUBO}}};
+use crate::{scenes::shadows::uniform::LightsSSBO, vulkan_wr::types::{figures::{make_cube, make_plane, make_stub_rgba}, matrix::Matrix, model::{MaterialUBO, Mesh, MeshGPU, Model, SubMesh, Transform, TransformUBO}}};
 
 use super::super::super::vulkan_wr::{
     app::VulkanApp,
@@ -36,7 +36,7 @@ impl Default for Positions {
     }
 }
 
-pub struct LightObject {
+pub struct ShadowsObject {
     pub meshes: Vec<MeshGPU>,
     pub cmd_vec: Vec<VulkanCommandBuffer>,
     pub pipeline: VulkanPipeline,
@@ -56,8 +56,8 @@ pub struct LightObject {
     pub pos: Positions,
 }
 
-impl<'a> InitObject<InitFrameResources<'a>> for LightObject {
-    type OutObject = LightObject;
+impl<'a> InitObject<InitFrameResources<'a>> for ShadowsObject {
+    type OutObject = ShadowsObject;
     fn init(app: & mut VulkanApp, resources: &mut InitFrameResources) -> Result<Self::OutObject, &'static str> {
 
     let obj_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -270,14 +270,14 @@ impl<'a> InitObject<InitFrameResources<'a>> for LightObject {
     };
 
     // --- построение (create_graphics_pipelines)
-    let pipeline = VulkanPipelineBuilder::new(
+    let pipeline = VulkanPipelineBuilder::new_dynamic(
         &app.core._logical_device,
-        resources.render_pass.as_ref().ok_or("Render: Obj is not initialized")?.render_pass,
         pipeline_layout.layout
     )
+    .with_color_attachment_formats(vec![app.swapchain.color_format])
+    .with_depth_attachment_format(app.swapchain.depth_format)
     .with_shader_stages(shader_stages)
     .with_vertex_input(vertex_input_info)
-    // .with_viewport_state(viewport_state)
     .with_dynamic_states(dynamic_state_info)
     .with_input_assembly(
         vk::PipelineInputAssemblyStateCreateInfo {
@@ -286,11 +286,10 @@ impl<'a> InitObject<InitFrameResources<'a>> for LightObject {
             ..Default::default()
         }
     )
-    .with_subpass(0) // Используем первый (и единственный) субпасс
     .with_depth_stencil(
-        vk::PipelineDepthStencilStateCreateInfo { // нужно для 3д фигур, иначе последние примитивы отрисуются поверх первых
+        vk::PipelineDepthStencilStateCreateInfo {
             depth_test_enable: vk::TRUE,
-            depth_write_enable: vk::TRUE,  //запись в буфер глубины
+            depth_write_enable: vk::TRUE,
             depth_compare_op: vk::CompareOp::LESS,
             ..Default::default()
         }
@@ -436,7 +435,7 @@ impl<'a> InitObject<InitFrameResources<'a>> for LightObject {
 }
 
 
-impl<'a> RenderObject<RenderFrameResources<'a>> for LightObject {
+impl<'a> RenderObject<RenderFrameResources<'a>> for ShadowsObject {
     fn render(&mut self,
             app: & mut VulkanApp,
             resources: &RenderFrameResources<'a>,
@@ -447,12 +446,22 @@ impl<'a> RenderObject<RenderFrameResources<'a>> for LightObject {
         let current_frame = app.frame_index as usize;
         let swap_extent = app.swapchain.extent;
         let cmd = &self.cmd_vec[current_frame];
-        let inheritance_info = vk::CommandBufferInheritanceInfo {
-            render_pass: resources.render_pass.as_ref().ok_or("Err obj is not initialized")?.render_pass,
-            subpass: 0,
-            framebuffer: resources.framebuffer.as_ref().ok_or("Err obj is not initialized")?.framebuffer,
-            ..Default::default()
-        };
+
+        let color_format = vec![app.swapchain.color_format];
+
+        let mut inheritance_rendering_info = vk::CommandBufferInheritanceRenderingInfo::default()
+            .color_attachment_formats(color_format.as_slice())
+            .depth_attachment_format(app.swapchain.depth_format)
+            .stencil_attachment_format(vk::Format::UNDEFINED)
+            .rasterization_samples(vk::SampleCountFlags::TYPE_1)
+            .flags(vk::RenderingFlags::CONTENTS_SECONDARY_COMMAND_BUFFERS);
+
+        let inheritance_info = vk::CommandBufferInheritanceInfo::default()
+            .render_pass(vk::RenderPass::null())
+            .subpass(0)
+            .framebuffer(vk::Framebuffer::null())
+            .push_next(&mut inheritance_rendering_info);
+
         cmd.begin(
             vk::CommandBufferUsageFlags::SIMULTANEOUS_USE | vk::CommandBufferUsageFlags::RENDER_PASS_CONTINUE,
             Some(&inheritance_info)
@@ -524,21 +533,21 @@ impl<'a> RenderObject<RenderFrameResources<'a>> for LightObject {
 }
 
 
-struct ShutdownLightObject {}
-impl ShutdownObjectResources for ShutdownLightObject {}
-impl ShutdownObject<ShutdownLightObject> for LightObject {
-    fn shutdown(app: & mut VulkanApp, resources: &mut ShutdownLightObject) -> Result<(), &'static str> {
+struct ShutdownShadowsObject {}
+impl ShutdownObjectResources for ShutdownShadowsObject {}
+impl ShutdownObject<ShutdownShadowsObject> for ShadowsObject {
+    fn shutdown(app: & mut VulkanApp, resources: &mut ShutdownShadowsObject) -> Result<(), &'static str> {
         Ok(())
     }
 }
 
-pub trait UpdateLightObject {
-    fn update_light(&mut self, obj: &mut LightObject, app: & mut VulkanApp) -> Result<(), &'static str>;
+pub trait UpdateShadowsObject {
+    fn update_shadows(&mut self, obj: &mut ShadowsObject, app: & mut VulkanApp) -> Result<(), &'static str>;
 }
 
-impl<T, Resources: UpdateObjectResources<T> + UpdateLightObject> UpdateObject<T, Resources> for LightObject {
+impl<T, Resources: UpdateObjectResources<T> + UpdateShadowsObject> UpdateObject<T, Resources> for ShadowsObject {
     fn update(&mut self, app: & mut VulkanApp, resources: &mut Resources) -> Result<(), &'static str> {
-        resources.update_light(self, app)?;
+        resources.update_shadows(self, app)?;
         Ok(())
     }
 }
