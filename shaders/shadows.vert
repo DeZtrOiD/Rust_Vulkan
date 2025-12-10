@@ -1,6 +1,6 @@
 // shadows.vert
 #version 450
-#extension GL_ARB_shader_viewport_layer_array: enable
+// #extension GL_ARB_shader_viewport_layer_array: enable
 // #extension VK_NV_viewport_array2: enable
 
 layout(location = 0) in vec3 inPosition;

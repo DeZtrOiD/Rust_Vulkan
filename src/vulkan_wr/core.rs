@@ -146,13 +146,13 @@ impl VulkanCoreBuilder {
             requested_device_extensions: vec![
                 ash::khr::swapchain::NAME.to_string_lossy().into_owned(),
                 ash::khr::dynamic_rendering::NAME.to_string_lossy().into_owned(),
-                ash::vk::NV_VIEWPORT_ARRAY2_NAME.to_string_lossy().into_owned(),
+                // ash::vk::NV_VIEWPORT_ARRAY2_NAME.to_string_lossy().into_owned(),
                 ash::khr::multiview::NAME.to_string_lossy().into_owned(),
             ],
             requested_device_features: vk::PhysicalDeviceFeatures {
                 sampler_anisotropy: 1,
                 fragment_stores_and_atomics: 1,
-                multi_viewport: 1,
+                // multi_viewport: 1,
                 ..Default::default()
             },
 
