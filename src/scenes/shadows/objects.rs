@@ -40,7 +40,7 @@ impl Default for Positions {
 
 // Максимальное количество в категории, всего категорий 3 
 const MAX_LIGHTS: usize = MAX_LIGHTS_IN_CAT;
-const SHADOW_MAP_RESOLUTION: u32 = 512;
+const SHADOW_MAP_RESOLUTION: u32 = 1024;
 
 pub struct ShadowsObject {
     pub meshes: Vec<MeshGPU>,

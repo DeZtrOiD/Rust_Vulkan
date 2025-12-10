@@ -68,9 +68,9 @@ layout(location = 0) out vec4 outColor;
 
 
 float calculateShadow(int lightIndex, vec4 PosLightSpace, mat4 light_mtx, vec3 normal, vec3 lightDir, bool flag) {
-    const vec2 gMapSize = vec2(512, 512);
+    const vec2 gMapSize = vec2(1024, 1024);
 
-    PosLightSpace = light_mtx * PosLightSpace;
+    PosLightSpace = (light_mtx * PosLightSpace);
     vec3 projCoords = PosLightSpace.xyz / PosLightSpace.w;
     projCoords = projCoords * 0.5 + 0.5;
     
@@ -93,27 +93,27 @@ float calculateShadow(int lightIndex, vec4 PosLightSpace, mat4 light_mtx, vec3 n
 
     float compareDepth = projCoords.z - bias;
 
-    vec2 texelSize = 1.0 / gMapSize;
 
     float shadow = 0.0;
 
-    // for (int x = -1; x <= 1; x++) {
-    //     for (int y = -1; y <= 1; y++) {
-    //         vec2 offset = vec2(x, y) * texelSize;
+    vec2 texelSize = 1.0 / gMapSize;
+    for (int x = -2; x <= 2; x++) {
+        for (int y = -2; y <= 2; y++) {
+            vec2 offset = vec2(x, y) * texelSize;
 
-    //         vec4 coord = vec4(
-    //             projCoords.xy + offset,
-    //             lightIndex,
-    //             compareDepth
-    //         );
+            vec4 coord = vec4(
+                projCoords.xy + offset,
+                lightIndex,
+                compareDepth
+            );
 
-    //         shadow += texture(shadowMap, coord);
-    //     }
-    // }
+            shadow += texture(shadowMap, coord);
+        }
+    }
 
-    // shadow /= 9.0;
+    shadow /= 25.0;
 
-    // return shadow;
+    return shadow;
 
 
     vec4 coord = vec4(projCoords.x, projCoords.y, lightIndex, currentDepth - bias);
