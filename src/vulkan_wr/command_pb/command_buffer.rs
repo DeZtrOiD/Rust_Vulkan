@@ -197,6 +197,15 @@ impl VulkanCommandBuffer {
         Ok(())
     }
 
+    pub fn clear_depth_stencil_image(&self,
+        image: vk::Image, image_layout: vk::ImageLayout,
+        clear_depth_stencil_value: &vk::ClearDepthStencilValue,
+        ranges: &[vk::ImageSubresourceRange]) {
+        unsafe {
+            self._device.cmd_clear_depth_stencil_image(self._buffer, image, image_layout, clear_depth_stencil_value, ranges);
+        }
+    }
+
 
     /// сбрасывает буфер 
     /// flags - указывает что делать с ресурсами буфера

@@ -92,7 +92,7 @@ impl<'a> VulkanImageViewBuilder<'a> {
     }
 
     /// количество слоев
-    pub fn layers(mut self, layers: u32) -> Self {
+    pub fn layer_count(mut self, layers: u32) -> Self {
         self.create_info.subresource_range.layer_count = layers;
         self
     }

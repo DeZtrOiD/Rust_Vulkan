@@ -4,8 +4,6 @@ use std::f32::EPSILON;
 use ash::vk;
 use super::super::super::vulkan_wr::{
     app::{VulkanApp, SceneResources},
-    render_pass::pass::VulkanRenderPass,
-    framebuffer::VulkanFramebuffer,
     image::{image_view::{VulkanImageView, VulkanImageViewBuilder}, image::{VulkanImage, VulkanImageBuilder}},
     command_pb::command_buffer::VulkanCommandBuffer,
     sync::{
@@ -22,8 +20,6 @@ use super::renderable_object::{RenderObjectEnum, GetFrameObj};
 #[derive(Clone, Copy)]
 pub struct Camera {
     pub pos: VulkanVector<3>,
-    pub up: VulkanVector<3>,
-    pub front: VulkanVector<3>,
     pub yaw: f32,  // rad, 0 -> -Z
     pub pitch: f32,  // rad [-π/2, π/2]
     pub view_matrix: Matrix<4, 4>,
@@ -34,8 +30,6 @@ impl Default for Camera {
     fn default() -> Self {
         Self {
             pos: VulkanVector { data: [0.0, -4.0, 2.0] },
-            up: VulkanVector { data: [0.0; 3] },
-            front: VulkanVector { data: [0.0; 3] },
             yaw: 0.0, pitch: 0.0,
             view_matrix: Matrix::identity(),
             dirty: true
@@ -102,6 +96,7 @@ pub struct FrameResources<R: ImguiResources + Default> {
     // по идее их лучше использовать и отвязать swapchain в init, но оно больше нигде не нужно и используется при пересоздании свапчейна и первой инициализации, и будто бы нет в них никакого смысла, но мало ли, надо когда=то это организовать нормально, наверное, но переделывать все это желания около 0
     pub color_attachment_format: vk::Format,
     pub depth_attachment_format: vk::Format,
+    pub shadow_finished_sem: Vec<VulkanSemaphore>,
 
 }
 
@@ -122,6 +117,12 @@ impl<R: ImguiResources + Default> SceneResources for FrameResources<R> {
         for _ in 0..sem_count {
             vec_sem.push(VulkanSemaphore::try_new(&app.core._logical_device)?);
         }
+
+        let mut vec_sem_shadow = vec![];
+        for _ in 0..image_count {
+            vec_sem_shadow.push(VulkanSemaphore::try_new(&app.core._logical_device)?);
+        }
+
 
         let mut vec_fence = vec![];
         for _ in 0..fence_count {
@@ -156,6 +157,7 @@ impl<R: ImguiResources + Default> SceneResources for FrameResources<R> {
 
             color_attachment_format: app.swapchain.color_format,
             depth_attachment_format: app.swapchain.depth_format,
+            shadow_finished_sem: vec_sem_shadow,
         })
     }
 

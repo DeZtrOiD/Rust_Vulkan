@@ -1,33 +1,22 @@
+// shadows.vert
 #version 450
+#extension GL_ARB_shader_viewport_layer_array: enable
+// #extension VK_NV_viewport_array2: enable
 
-layout(location = 0) in vec3 inPos;
-layout(location = 1) in vec3 inColor;
-layout(location = 2) in vec3 inNormal;
-layout(location = 3) in vec2 inTexCoord;
+layout(location = 0) in vec3 inPosition;
 
-layout(set = 0, binding = 0) uniform UBO {
-    mat4 view_proj;
-    vec4 cam_pos;
-    float time;
+layout(set = 0, binding = 0) uniform ShadowUniform {
+    mat4 lightSpaceMatrix;
+    uint indx;
+    vec3 _pad;
 } ubo;
 
-layout(set = 3, binding = 0) uniform MBO {
+layout(set = 1, binding = 0) uniform MBO {
     mat4 model;
     mat4 normal;
 } model;
 
-layout(location = 0) out vec3 fragPos;
-layout(location = 1) out vec3 fragNormal;
-layout(location = 2) out vec2 fragTexCoord;
-layout(location = 3) out vec3 camPos;
-
 void main() {
-    camPos = vec3(ubo.cam_pos.xyz);
-    fragPos = (model.model * vec4(inPos, 1.0)).xyz;
-    fragTexCoord = inTexCoord;
-
-    mat3 normal_matrix = mat3(model.normal); //transpose(inverse(mat3(model.model)));
-    fragNormal = normalize(normal_matrix * inNormal);
-
-    gl_Position =   ubo.view_proj *  model.model * vec4(inPos, 1.0);
+    gl_Position = ubo.lightSpaceMatrix * model.model * vec4(inPosition, 1.0);
+    // gl_Layer = int(ubo.indx);
 }

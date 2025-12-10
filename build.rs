@@ -18,6 +18,10 @@ fn main() {
         ("light.frag", "frag_light.spv"),
         ("imgui.vert", "imgui_vert.spv"),
         ("imgui.frag", "imgui_frag.spv"),
+        ("shadows.vert", "vert_shadows.spv"),
+        ("shadows.frag", "frag_shadows.spv"),
+        ("light_shadows.frag", "frag_light_shadows.spv"),
+        ("light_shadows.vert", "vert_light_shadows.spv"),
     ];
 
     for (src_name, dst_name) in shaders {

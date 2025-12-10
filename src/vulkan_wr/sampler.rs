@@ -78,6 +78,14 @@ impl<'a> VulkanSamplerBuilder<'a> {
         self.info.address_mode_w = address_mode_w;
         self
     }
+    pub fn address_mode(mut self, address_mode: vk::SamplerAddressMode) -> Self {
+        self.info.address_mode_u = address_mode;
+        self.info.address_mode_v = address_mode;
+        self.info.address_mode_w = address_mode;
+        self 
+    }
+
+
     /// Смещение уровня детализации (LOD — Level of Detail) при выборе mip-уровня.
     /// Полезно для управления размытием или резкостью текстуры.
     pub fn mip_lod_bias(mut self, mip_lod_bias: f32) -> Self {

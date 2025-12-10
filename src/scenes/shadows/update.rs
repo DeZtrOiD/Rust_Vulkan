@@ -1,7 +1,7 @@
 
 use std::{f32::consts::PI, mem::offset_of};
 
-use crate::{scenes::lighting::uniform::{DirectionalLight, LightsSSBO, PointLight, Spotlight}, vulkan_wr::types::vector::VulkanVector};
+use crate::{scenes::shadows::uniform::{DirectionalLight, LightsSSBO, MAX_LIGHTS_IN_CAT, PointLight, Spotlight}, vulkan_wr::types::vector::VulkanVector};
 
 use super::{
     uniform::Uniforms,
@@ -112,8 +112,7 @@ impl UpdateShadowsObject for ResourcesShadows {
                 ub.mem_copy(&[u], None, None, None)?;
             }
         }
-        
-        let ssbo = LightsSSBO {
+        obj.lights_data = LightsSSBO {
             time: self.time,
             light_count_directional: self.light_count_directional,
             light_count_point: self.light_count_point,
@@ -122,22 +121,27 @@ impl UpdateShadowsObject for ResourcesShadows {
                 DirectionalLight { // blue left
                     direction: [-1.0, self.rotation / PI, 0.0, 0.0],  // [0.5, 1.0, 0.3, 0.0]
                     color: [1.0, 0.0, 0.0, 1.0],
+                    ..Default::default()
                 },
                 DirectionalLight { // red right
                     direction: [1.0, self.rotation / PI, 0.0, 0.0],
                     color: [0.0, 1.0, 0.0, 1.0],
+                    ..Default::default()
                 },
                 DirectionalLight {  // green forward
                     direction: [0.0, self.rotation / PI, -1.0, 0.0],
                     color: [0.0, 0.0, 1.0, 1.0],
+                    ..Default::default()
                 },
                 DirectionalLight { // white back
                     direction: [0.0, self.rotation / PI, 1.0, 0.0],
                     color: [1.0, 1.0, 1.0, 1.0],
+                    ..Default::default()
                 },
                 DirectionalLight {
                     direction: [0.5, 1.0, 0.3, 0.0],
                     color: [0.0, 0.0, 0.0, 0.0],
+                    ..Default::default()
                 }
             ],
             point_lights: [
@@ -194,9 +198,28 @@ impl UpdateShadowsObject for ResourcesShadows {
             ],
             ..Default::default()
         };
+        // TODO: надо что-то с этим сделать. когда нибудь точно точно 
+        let scene_center = VulkanVector::new([0.0, 0.0, 0.0]);
+        let scene_size = 30.0;
+        // directional
+        for i in 0..self.light_count_directional as usize {
+            let light_dir = VulkanVector::new(obj.lights_data.directional_lights[i].direction).to3v();
+            obj.lights_data.directional_lights[i].light_matrices = ShadowsObject::calculate_light_space_matrix(&light_dir, &scene_center, scene_size, false, None).data;
+        }
+        // point
+        // for i in 0..self.light_count_point as usize {
+            
+        // }
+        // spotlight
+        for i in 0..self.light_count_spotlight as usize {
+            let light_dir = VulkanVector::new(obj.lights_data.spotlights[i].direction).to3v();
+            let light_pos = VulkanVector::new(obj.lights_data.spotlights[i].position).to3v();
+            obj.lights_data.spotlights[i].light_matrices = ShadowsObject::calculate_light_space_matrix(&light_dir, &scene_center, scene_size, true, Some(&light_pos)).data;
+        }
+
         for sb in &obj.ssbo_light_buffer {
             unsafe {
-                sb.mem_copy(&[ssbo], None, None, None)?;
+                sb.mem_copy(&[obj.lights_data], None, None, None)?;
             }
         }
 

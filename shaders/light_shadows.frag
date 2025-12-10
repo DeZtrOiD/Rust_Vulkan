@@ -67,7 +67,9 @@ layout(set = 4, binding = 0) uniform sampler2DArrayShadow shadowMap;
 layout(location = 0) out vec4 outColor;
 
 
-float calculateShadow(int lightIndex, vec4 PosLightSpace, mat4 light_mtx, vec3 normal, vec3 lightDir) {
+float calculateShadow(int lightIndex, vec4 PosLightSpace, mat4 light_mtx, vec3 normal, vec3 lightDir, bool flag) {
+    const vec2 gMapSize = vec2(512, 512);
+
     PosLightSpace = light_mtx * PosLightSpace;
     vec3 projCoords = PosLightSpace.xyz / PosLightSpace.w;
     projCoords = projCoords * 0.5 + 0.5;
@@ -80,12 +82,42 @@ float calculateShadow(int lightIndex, vec4 PosLightSpace, mat4 light_mtx, vec3 n
     float minBias = 0.2;
     float maxBias = 0.27;
 
+    if (flag) {
+        maxBias = 0.0148;
+    } else {
+        maxBias = 0.27;
+    }
     float bias = clamp(6 * minBias * max(dot(normal, lightDir), 1.0 - dot(normal, lightDir)), minBias, maxBias);
-    
+    // bias = 0.0148;
     float currentDepth = projCoords.z;
 
+    float compareDepth = projCoords.z - bias;
+
+    vec2 texelSize = 1.0 / gMapSize;
+
+    float shadow = 0.0;
+
+    // for (int x = -1; x <= 1; x++) {
+    //     for (int y = -1; y <= 1; y++) {
+    //         vec2 offset = vec2(x, y) * texelSize;
+
+    //         vec4 coord = vec4(
+    //             projCoords.xy + offset,
+    //             lightIndex,
+    //             compareDepth
+    //         );
+
+    //         shadow += texture(shadowMap, coord);
+    //     }
+    // }
+
+    // shadow /= 9.0;
+
+    // return shadow;
+
+
     vec4 coord = vec4(projCoords.x, projCoords.y, lightIndex, currentDepth - bias);
-    float shadow = texture(shadowMap, coord);
+    shadow = texture(shadowMap, coord);
     return shadow;
     
 }
@@ -142,7 +174,7 @@ void main() {
         vec3 col = directional_lights[i].color.rgb;
         float light_intensity = directional_lights[i].color.w;
 
-        float shadow = calculateShadow(int(i), fragPosLightSpace, directional_lights[i].light_mtx,  N, L);
+        float shadow = calculateShadow(int(i), fragPosLightSpace, directional_lights[i].light_mtx,  N, L, false);
 
         result += calc_Blinn_Phong(N, L, V, col, light_intensity, shininess, specular_m, albedo) * (shadow);
     }
@@ -193,8 +225,9 @@ void main() {
         vec3 col = spotlights[i].color.rgb;
 
         // float shadow = calculateShadow(int(i + MAX_LIGHTS * 2), fragPosLightSpace, spotlights[i].light_mtx);
+        float shadow = calculateShadow(int(i + MAX_LIGHTS * 2), fragPosLightSpace, spotlights[i].light_mtx,  N, L, true);
         
-        result += calc_Blinn_Phong(N, L, V, col, light_intensity * spot_intensity, shininess, specular_m, albedo); // * (1.0 - shadow);
+        result += calc_Blinn_Phong(N, L, V, col, light_intensity * spot_intensity, shininess, specular_m, albedo) * (shadow);
     }
     // ========== ПРОСТАЯ ПРОВЕРКА ТЕНЕЙ ==========
     // ВРЕМЕННАЯ ПРОВЕРКА: замените сложные тени на простой тест

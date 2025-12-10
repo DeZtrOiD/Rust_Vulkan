@@ -34,7 +34,8 @@ pub fn render_frame_app<R: ImguiResources + Default>(app: & mut VulkanApp, resou
     
     let sem_offset = (current_frame * 2) as usize;
     let image_available = resources.vec_sem[sem_offset].semaphore.clone();
-    
+    let shadow_finished = &resources.shadow_finished_sem[current_frame].semaphore;
+
     let (image_index, suboptimal) = app.swapchain.acquire_next_image(Some(image_available), None)?;
     if suboptimal {
             // Swapchain полностью устарел, нужно пересоздать
@@ -46,6 +47,20 @@ pub fn render_frame_app<R: ImguiResources + Default>(app: & mut VulkanApp, resou
             return Ok(());
     }
 
+    // Рендерим shadow pass перед основным рендерингом
+    for obj in &mut resources.vec_objects {
+        if let RenderObjectEnum::Shadows(shadow_obj) = obj {
+            shadow_obj.render_shadow_pass(app)?;
+        }
+    }
+    // Получаем командные буферы для теней
+    let mut shadow_command_buffers = Vec::new();
+    for obj in &resources.vec_objects {
+        if let RenderObjectEnum::Shadows(shadow_obj) = obj {
+            shadow_command_buffers.push(shadow_obj.shadow_cmd_vec[current_frame as usize]._buffer);
+        }
+    }
+    
     let resss = RenderFrameResources{
             // render_pass: Some(resources.render_pass.as_ref().unwrap()),
             // framebuffer: Some(&resources.framebuffers[image_index as usize]),
@@ -54,9 +69,8 @@ pub fn render_frame_app<R: ImguiResources + Default>(app: & mut VulkanApp, resou
     for obj in &mut resources.vec_objects {
         obj.render(app, &resss)?;
     }
-
     let cmd_primary = &resources.vec_cmd_primary[current_frame as usize];
-
+    
     // Основной буфер команд, который включает в себя secondary
     {
         cmd_primary.reset(None)?;
@@ -192,28 +206,41 @@ pub fn render_frame_app<R: ImguiResources + Default>(app: & mut VulkanApp, resou
         cmd_primary.end()?;
     }
 
-    let render_finished = &resources.vec_sem[(image_index * 2 + 1) as usize];
+    let render_finished = &(&resources.vec_sem[(image_index * 2 + 1) as usize]).semaphore;
 
     // Submit
     let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
 
-    let submit_info = vk::SubmitInfo {
+
+    let shadow_submit = vk::SubmitInfo {
         wait_semaphore_count: 1,
         p_wait_semaphores: &image_available,
+        p_wait_dst_stage_mask: &vk::PipelineStageFlags::TOP_OF_PIPE,
+        command_buffer_count: shadow_command_buffers.len() as u32,
+        p_command_buffers: shadow_command_buffers.as_ptr(),
+        signal_semaphore_count: 1,
+        p_signal_semaphores: shadow_finished,
+        ..Default::default()
+    };
+
+
+    let submit_info = vk::SubmitInfo {
+        wait_semaphore_count: 1,
+        p_wait_semaphores: shadow_finished,
         p_wait_dst_stage_mask: wait_stages.as_ptr(),
         command_buffer_count: 1,
         p_command_buffers: &cmd_primary._buffer,
         signal_semaphore_count: 1,
-        p_signal_semaphores: &render_finished.semaphore,
+        p_signal_semaphores: render_finished,
         ..Default::default()
     };
 
-    app.core.queue_submit(&[submit_info], frame_sync)?;
+    app.core.queue_submit(&[shadow_submit, submit_info], frame_sync)?;
 
     // Present
     let present_info = vk::PresentInfoKHR {
         wait_semaphore_count: 1,
-        p_wait_semaphores: &render_finished.semaphore,
+        p_wait_semaphores: render_finished,
         swapchain_count: 1,
         p_swapchains: &app.swapchain.swapchain,
         p_image_indices: &image_index,

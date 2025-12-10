@@ -145,11 +145,14 @@ impl VulkanCoreBuilder {
 
             requested_device_extensions: vec![
                 ash::khr::swapchain::NAME.to_string_lossy().into_owned(),
-                ash::khr::dynamic_rendering::NAME.to_string_lossy().into_owned()
+                ash::khr::dynamic_rendering::NAME.to_string_lossy().into_owned(),
+                ash::vk::NV_VIEWPORT_ARRAY2_NAME.to_string_lossy().into_owned(),
+                ash::khr::multiview::NAME.to_string_lossy().into_owned(),
             ],
             requested_device_features: vk::PhysicalDeviceFeatures {
                 sampler_anisotropy: 1,
                 fragment_stores_and_atomics: 1,
+                multi_viewport: 1,
                 ..Default::default()
             },
 
@@ -376,7 +379,7 @@ impl VulkanCoreBuilder {
             print!("prop: \n{:?}={}\n", props.device_name_as_c_str(), mem_limit);
             let queues_family = unsafe { instance.get_physical_device_queue_family_properties(pd) };
             let features = unsafe { instance.get_physical_device_features(pd) };
-            if features.sampler_anisotropy == 0 || features.fragment_stores_and_atomics == 0 { continue; }
+            if features.sampler_anisotropy == 0 || features.fragment_stores_and_atomics == 0 || features.multi_viewport == 0 { continue; }
     
             // у девайся должна быть подходящая очередь, иначе зачем он такой?
             for (i, q) in queues_family.iter().enumerate() {

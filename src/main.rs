@@ -92,6 +92,7 @@ fn main() {
             std::thread::sleep(std::time::Duration::from_millis(100));
             continue;
         }
+        std::thread::sleep(std::time::Duration::from_millis(5));
     }
 
     app.device_wait_idle().unwrap();
