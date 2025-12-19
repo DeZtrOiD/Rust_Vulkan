@@ -24,6 +24,7 @@ To run a release build, use:
 ```
 cargo run --release
 ```
+You can select the desired scene using [Cargo.toml](Cargo.toml) by setting the value 'default=["sceneN"]'.
 
 ![](texture/2.png)
 ![](texture/1.png)
