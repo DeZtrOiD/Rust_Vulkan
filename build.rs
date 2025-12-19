@@ -3,6 +3,24 @@ use std::process::Command;
 use std::fs;
 use std::path::Path;
 
+
+fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    fs::create_dir_all(&dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            let dst_path = dst.as_ref().join(entry.file_name());
+            println!("Copying model file: {:?} -> {:?}", entry.path(), dst_path);
+            fs::copy(entry.path(), dst_path)?;
+            println!("cargo:rerun-if-changed={}", entry.path().display());
+        }
+    }
+    Ok(())
+}
+
 fn main() {
     let shader_dir = Path::new("shaders");
     let profile = std::env::var("PROFILE").unwrap(); // debug или release
@@ -28,7 +46,6 @@ fn main() {
         let src = shader_dir.join(src_name);
         let dst = bin_dir.join(dst_name);
 
-        // 1. Компиляция через glslc
         let status = Command::new("glslc")
             .args([src.to_str().unwrap(), "-o", dst.to_str().unwrap()])
             .status()
@@ -38,10 +55,20 @@ fn main() {
             panic!("Shader compilation failed: {}", src.display());
         }
 
-        // 2. Сообщить Cargo, что если шейдер изменился — пересобрать
         println!("cargo:rerun-if-changed={}", src.display());
     }
 
-    // 3. Чтобы бинарник мог найти шейдеры
-    println!("cargo:rustc-env=SHADER_PATH=target/debug/shaders");
+    let out_dir = format!("target/{}/", profile);
+    let model_src_dir = Path::new("obj_3d");
+    let model_dst_dir = Path::new(&out_dir).join("obj_3d");
+
+    if model_src_dir.exists() {
+        copy_dir_all(model_src_dir, &model_dst_dir)
+            .expect("Failed to copy 3D models recursively");
+    } else {
+        eprintln!("Warning: 3D model source directory not found: {:?}", model_src_dir);
+    }
+
+
+    // println!("cargo:rustc-env=SHADER_PATH=target/debug/shaders");
 }

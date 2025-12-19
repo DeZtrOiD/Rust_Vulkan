@@ -140,12 +140,24 @@ impl<'a> InitObject<InitFrameResources<'a>> for SphereObject {
     )?;
 
     // 6. Shader stages. Стоит это все внутрь шейдера засунуть.
-    let shader_dir = std::env::var("SHADER_PATH").unwrap();
-    let vert_path = format!("{}/vert_sphere.spv", shader_dir);
-    let frag_path = format!("{}/frag_sphere.spv", shader_dir);
 
-    let vert_shader = VulkanShader::try_new(&app.core._logical_device, &vert_path)?;
-    let frag_shader = VulkanShader::try_new(&app.core._logical_device, &frag_path)?;
+    let exe_path = std::env::current_exe()
+        .expect("Failed to get current executable path");
+    let exe_dir = exe_path
+        .parent()
+        .expect("Executable is in the root directory?")
+        .to_path_buf();
+
+    // let shader_dir = std::env::var("SHADER_PATH").unwrap();
+    let vert_path = exe_dir.join("shaders").join("vert_sphere.spv");
+    //.to_str().ok_or("Failed found shaders")?;
+    //format!("{}/shaders/vert_sphere.spv", exe_dir.r);
+    let frag_path = exe_dir.join("shaders").join("frag_sphere.spv");
+    //.to_str().ok_or("Failed found shaders")?;
+    //format!("{}/shaders/frag_sphere.spv", exe_dir);
+
+    let vert_shader = VulkanShader::try_new(&app.core._logical_device, &vert_path.to_str().ok_or("Failed found shaders")?)?;
+    let frag_shader = VulkanShader::try_new(&app.core._logical_device, &frag_path.to_str().ok_or("Failed found shaders")?)?;
 
     // entry_point для шейдера
     let entry_point = std::ffi::CString::new("main").unwrap();

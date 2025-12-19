@@ -435,12 +435,22 @@ impl<'a> InitObject<InitFrameResources<'a>> for ShadowsObject {
 
     // 6. Shader stages. Стоит это все внутрь шейдера засунуть.
 
-    let shader_dir = std::env::var("SHADER_PATH").unwrap();
-    let vert_path = format!("{}/vert_light_shadows.spv", shader_dir);
-    let frag_path = format!("{}/frag_light_shadows.spv", shader_dir);
+    // let shader_dir = std::env::var("SHADER_PATH").unwrap();
+    // let vert_path = format!("{}/vert_light_shadows.spv", shader_dir);
+    // let frag_path = format!("{}/frag_light_shadows.spv", shader_dir);
+    // let vert_shader = VulkanShader::try_new(&app.core._logical_device, &vert_path)?;
+    // let frag_shader = VulkanShader::try_new(&app.core._logical_device, &frag_path)?;
 
-    let vert_shader = VulkanShader::try_new(&app.core._logical_device, &vert_path)?;
-    let frag_shader = VulkanShader::try_new(&app.core._logical_device, &frag_path)?;
+    let exe_path = std::env::current_exe()
+        .expect("Failed to get current executable path");
+    let exe_dir = exe_path
+        .parent()
+        .expect("Executable is in the root directory?")
+        .to_path_buf();
+    let vert_path = exe_dir.join("shaders").join("vert_light_shadows.spv");
+    let frag_path = exe_dir.join("shaders").join("frag_light_shadows.spv");
+    let vert_shader = VulkanShader::try_new(&app.core._logical_device, &vert_path.to_str().ok_or("Failed found shaders")?)?;
+    let frag_shader = VulkanShader::try_new(&app.core._logical_device, &frag_path.to_str().ok_or("Failed found shaders")?)?;
 
     // entry_point для шейдера
     let entry_point = std::ffi::CString::new("main").unwrap();
@@ -849,11 +859,23 @@ impl ShadowsObject {
 
     fn create_shadow_pipeline(app: &VulkanApp, layout: &VulkanPipelineLayout) -> Result<VulkanPipeline, &'static str> {
         // Загрузка шейдеров для теневого прохода
-        let shader_dir = std::env::var("SHADER_PATH").unwrap();
-        let shadow_vert_path = format!("{}/vert_shadows.spv", shader_dir);
-        // let shadow_frag_path = format!("{}/frag_shadows.spv", shader_dir);
+        let exe_path = std::env::current_exe()
+            .expect("Failed to get current executable path");
+        let exe_dir = exe_path
+            .parent()
+            .expect("Executable is in the root directory?")
+            .to_path_buf();
+        let shadow_vert_path = exe_dir.join("shaders").join("vert_shadows.spv");
+        // let frag_path = exe_dir.join("shaders").join("frag_shadows.spv");
+        let shadow_vert_shader = VulkanShader::try_new(&app.core._logical_device, &shadow_vert_path.to_str().ok_or("Failed found shaders")?)?;
+        // let frag_shader = VulkanShader::try_new(&app.core._logical_device, &frag_path.to_str().ok_or("Failed found shaders")?)?;
 
-        let shadow_vert_shader = VulkanShader::try_new(&app.core._logical_device, &shadow_vert_path)?;
+
+        // let shader_dir = std::env::var("SHADER_PATH").unwrap();
+        // let shadow_vert_path = format!("{}/vert_shadows.spv", shader_dir);
+        // // let shadow_frag_path = format!("{}/frag_shadows.spv", shader_dir);
+
+        // let shadow_vert_shader = VulkanShader::try_new(&app.core._logical_device, &shadow_vert_path)?;
         // let shadow_frag_shader = VulkanShader::try_new(&app.core._logical_device, &shadow_frag_path)?;
 
         let entry_point = std::ffi::CString::new("main").unwrap();

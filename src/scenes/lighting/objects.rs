@@ -60,8 +60,14 @@ impl<'a> InitObject<InitFrameResources<'a>> for LightObject {
     type OutObject = LightObject;
     fn init(app: & mut VulkanApp, resources: &mut InitFrameResources) -> Result<Self::OutObject, &'static str> {
 
-    let obj_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("obj_3d");
+    let exe_path = std::env::current_exe()
+        .expect("Failed to get current executable path");
+    let exe_dir = exe_path
+        .parent()
+        .expect("Executable is in the root directory?")
+        .to_path_buf();
+
+    let obj_dir = exe_dir.join("obj_3d");
 
     let path_to_obj = obj_dir.join("car").join("Car.obj");
     let path_to_obj_str = path_to_obj.to_str().unwrap();
@@ -219,12 +225,24 @@ impl<'a> InitObject<InitFrameResources<'a>> for LightObject {
 
     // 6. Shader stages. Стоит это все внутрь шейдера засунуть.
 
-    let shader_dir = std::env::var("SHADER_PATH").unwrap();
-    let vert_path = format!("{}/vert_light.spv", shader_dir);
-    let frag_path = format!("{}/frag_light.spv", shader_dir);
+    let exe_path = std::env::current_exe()
+        .expect("Failed to get current executable path");
+    let exe_dir = exe_path
+        .parent()
+        .expect("Executable is in the root directory?")
+        .to_path_buf();
+    let vert_path = exe_dir.join("shaders").join("vert_light.spv");
+    let frag_path = exe_dir.join("shaders").join("frag_light.spv");
+    let vert_shader = VulkanShader::try_new(&app.core._logical_device, &vert_path.to_str().ok_or("Failed found shaders")?)?;
+    let frag_shader = VulkanShader::try_new(&app.core._logical_device, &frag_path.to_str().ok_or("Failed found shaders")?)?;
 
-    let vert_shader = VulkanShader::try_new(&app.core._logical_device, &vert_path)?;
-    let frag_shader = VulkanShader::try_new(&app.core._logical_device, &frag_path)?;
+
+    // let shader_dir = std::env::var("SHADER_PATH").unwrap();
+    // let vert_path = format!("{}/vert_light.spv", shader_dir);
+    // let frag_path = format!("{}/frag_light.spv", shader_dir);
+
+    // let vert_shader = VulkanShader::try_new(&app.core._logical_device, &vert_path)?;
+    // let frag_shader = VulkanShader::try_new(&app.core._logical_device, &frag_path)?;
 
     // entry_point для шейдера
     let entry_point = std::ffi::CString::new("main").unwrap();

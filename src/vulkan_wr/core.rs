@@ -334,7 +334,7 @@ impl VulkanCoreBuilder {
 
         // device create info
         let device_info = vk::DeviceCreateInfo {
-            p_next: &mut synchronization2_features as *mut _ as *const _, // ← добавили pNext
+            p_next: &mut synchronization2_features as *mut _ as *const _,
             queue_create_info_count: 1,
             p_queue_create_infos: &queue_create_info,
             p_enabled_features: &self.requested_device_features,

@@ -193,7 +193,7 @@ impl Model {
         for mesh in self.meshes.iter_mut() {
             let vb = VulkanBuffer::try_new(
                 &app.core,
-                (std::mem::size_of::<VulkanVertex>() * mesh.vertices.len()) as u64,
+                (std::mem::size_of::<VulkanVertex>() * mesh.vertices.len()) as u64 * app.image_count as u64,
                 vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
                 vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
                 None, None, None, None
@@ -214,7 +214,7 @@ impl Model {
             let mut textures_for_mesh = Vec::new();
             let mat_buf = VulkanBuffer::try_new(
                 &app.core,
-                aligned_size * mesh.submeshes.len() as u64,
+                aligned_size * mesh.submeshes.len() as u64 * app.image_count as u64,
                 vk::BufferUsageFlags::UNIFORM_BUFFER,
                 vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
                 None, None, None, None
@@ -249,10 +249,15 @@ impl Model {
                 offset += aligned_size;
                 textures_for_mesh.push(texture);
             }
+
+            let alignment = app.get_min_ubo_alignment();  // aligned_size GPU
+            let mat_size = std::mem::size_of::<TransformUBO>() as u64;
+            let aligned_size = ((mat_size + alignment - 1) / alignment) * alignment;
+
             let transf_ubo = VulkanBuffer::try_new(
                 &app.core,
                 // size_of::<TransformUBO>()
-                256 * 4 as u64 ,
+                aligned_size * app.image_count as u64 ,
                 vk::BufferUsageFlags::UNIFORM_BUFFER,
                 vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
                 None, None, None, None
@@ -262,10 +267,10 @@ impl Model {
                 model: tmp.transpose().data,
                 normal: (tmp.inverse())?.data  // transpose().transpose().
             };
-            unsafe { transf_ubo.mem_copy(&[transf_data], None, None, None)?; }
-            unsafe { transf_ubo.mem_copy(&[transf_data], Some(256), None, None)?; }
-            unsafe { transf_ubo.mem_copy(&[transf_data], Some(256 * 2), None, None)?; }
-            unsafe { transf_ubo.mem_copy(&[transf_data], Some(256 * 3), None, None)?; }
+            for i in 0..app.image_count as u64 {
+                unsafe { transf_ubo.mem_copy(&[transf_data], Some(aligned_size * i), None, None)?; }
+
+            }
 
             gpu_meshes.push(MeshGPU {
                 vertex_buf: vb,

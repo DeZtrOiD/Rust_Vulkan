@@ -133,12 +133,22 @@ impl <'a, R: ImguiResources + Default> InitObject<InitFrameResources<'a>> for Vu
 
         // 11. Создание пайплайна для ImGui
         // 11.1. Загрузка шейдеров ImGui
-        let shader_dir = std::env::var("SHADER_PATH").unwrap();
-        let vert_path = format!("{}/imgui_vert.spv", shader_dir);
-        let frag_path = format!("{}/imgui_frag.spv", shader_dir);
+        let exe_path = std::env::current_exe()
+            .expect("Failed to get current executable path");
+        let exe_dir = exe_path
+            .parent()
+            .expect("Executable is in the root directory?")
+            .to_path_buf();
+        let vert_path = exe_dir.join("shaders").join("imgui_vert.spv");
+        let frag_path = exe_dir.join("shaders").join("imgui_frag.spv");
+        let imgui_vert_shader = VulkanShader::try_new(&app.core._logical_device, &vert_path.to_str().ok_or("Failed found shaders")?)?;
+        let imgui_frag_shader = VulkanShader::try_new(&app.core._logical_device, &frag_path.to_str().ok_or("Failed found shaders")?)?;
 
-        let imgui_vert_shader = VulkanShader::try_new(&app.core._logical_device, &vert_path)?;
-        let imgui_frag_shader = VulkanShader::try_new(&app.core._logical_device, &frag_path)?;
+        // let shader_dir = std::env::var("SHADER_PATH").unwrap();
+        // let vert_path = format!("{}/imgui_vert.spv", shader_dir);
+        // let frag_path = format!("{}/imgui_frag.spv", shader_dir);
+        // let imgui_vert_shader = VulkanShader::try_new(&app.core._logical_device, &vert_path)?;
+        // let imgui_frag_shader = VulkanShader::try_new(&app.core._logical_device, &frag_path)?;
 
         let entry_point = std::ffi::CString::new("main").unwrap();
         let imgui_shader_stages = vec![
